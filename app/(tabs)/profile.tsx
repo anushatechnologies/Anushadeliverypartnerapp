@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
@@ -47,7 +48,7 @@ export default function Profile() {
   const [showHelp, setShowHelp] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [profileStats, setProfileStats] = useState({ totalTrips: 0, rating: "4.9" });
+  const [profileStats, setProfileStats] = useState({ totalTrips: 0, rating: "--" });
   const [popup, setPopup] = useState<{visible: boolean, type: PopupType, title: string, message: string}>({
     visible: false, type: "success", title: "", message: ""
   });
@@ -130,7 +131,7 @@ export default function Profile() {
   React.useEffect(() => {
     if (user?.id) {
        orderService.getStatistics(user.id)
-         .then(res => setProfileStats({ totalTrips: res.completedOrders || 0, rating: res.rating || "4.9" }))
+         .then(res => setProfileStats({ totalTrips: res.completedOrders || 0, rating: res.rating || "--" }))
          .catch(e => console.warn("Failed fetching profile stats", e));
     }
   }, [user?.id]);
@@ -194,13 +195,6 @@ export default function Profile() {
                     <Text style={styles.idTextMini}>ID: AB-{user?.phone?.slice(-4) || '0000'}</Text>
                   </View>
                 </View>
-
-                <TouchableOpacity 
-                   style={styles.editProfileBtn} 
-                   onPress={() => router.push({ pathname: "/register", params: { phone: user?.phone }})}
-                >
-                   <MaterialCommunityIcons name="pencil" size={18} color="#fff" />
-                </TouchableOpacity>
               </View>
             </LinearGradient>
           </Animated.View>
@@ -231,7 +225,12 @@ export default function Profile() {
           <View style={styles.menuGroupCard}>
              <MenuAction icon="account-details-outline" label="Personal Details" onPress={() => setPersonalModal(true)} />
              <View style={styles.menuDividerLine} />
-             <MenuAction icon="car-info" label="Vehicle Information" onPress={() => setVehicleModal(true)} />
+             <MenuAction 
+               icon="car-info" 
+               label="Vehicle Information" 
+               onPress={() => setVehicleModal(true)} 
+               value={user?.vehicleModel ? `${user.vehicleType} (${user.vehicleModel})` : user?.vehicleType} 
+             />
              <View style={styles.menuDividerLine} />
              <MenuAction icon="shield-check-outline" label="KYC Verification" onPress={() => router.push("/kyc")} status={authState.verificationStatus || 'Pending'} />
           </View>
@@ -319,6 +318,8 @@ export default function Profile() {
         visible={vehicleModal} 
         onClose={() => setVehicleModal(false)} 
         initialType={user?.vehicleType || "Bike"}
+        initialModel={user?.vehicleModel || ""}
+        initialRegNo={user?.registrationNumber || ""}
         onSuccess={showSuccessPopup}
       />
 
@@ -340,23 +341,23 @@ export default function Profile() {
                  <SupportTile 
                    icon="phone-in-talk" 
                    label="Call Support" 
-                   desc="Direct line to partner care" 
+                   desc="Call: 6309981555" 
                    color="#4F46E5" 
-                   onPress={() => Alert.alert("Calling Support", "Connecting you to our team...")} 
+                   onPress={() => Linking.openURL('tel:6309981555')} 
                  />
                  <SupportTile 
-                   icon="chat-processing" 
+                   icon="whatsapp" 
                    label="Chat with Us" 
-                   desc="Instant message with agent" 
-                   color="#10B981" 
-                   onPress={() => Alert.alert("Opening Chat", "Starting a secure chat session...")} 
+                   desc="WhatsApp: 6309981555" 
+                   color="#25D366" 
+                   onPress={() => Linking.openURL('https://wa.me/916309981555?text=Hi%2C%20I%20need%20help%20with%20Anusha%20Bazaar%20Delivery%20Partner%20app')} 
                  />
                  <SupportTile 
                    icon="frequently-asked-questions" 
                    label="View FAQs" 
                    desc="Browse helpful articles" 
                    color="#F59E0B" 
-                   onPress={() => Alert.alert("FAQs", "Opening help center...")} 
+                   onPress={() => { setShowHelp(false); router.push('/help'); }} 
                  />
               </View>
 
@@ -500,10 +501,10 @@ function EditPersonalModal({ visible, onClose, initialName, phone, onSuccess }: 
   );
 }
 
-function EditVehicleModal({ visible, onClose, initialType, onSuccess }: any) {
+function EditVehicleModal({ visible, onClose, initialType, initialModel, initialRegNo, onSuccess }: any) {
   const [vehicle, setVehicle] = useState(initialType || "Bike");
-  const [model, setModel] = useState("");
-  const [regNo, setRegNo] = useState("");
+  const [model, setModel] = useState(initialModel || "");
+  const [regNo, setRegNo] = useState(initialRegNo || "");
   const [loading, setLoading] = useState(false);
   const { updateProfile } = useUser();
 

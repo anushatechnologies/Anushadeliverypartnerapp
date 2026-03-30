@@ -846,55 +846,60 @@ export default function OrdersTab() {
       </Modal>
 
       {/* Real Camera Scanner Modal (QR) */}
-      <Modal visible={scannerVisible} animationType="slide">
-        <View style={styles.scannerModalMain}>
-          <CameraView
-            barcodeScannerSettings={{
-              barcodeTypes: ["qr"],
-            }}
-            onBarcodeScanned={scannerVisible ? handleBarCodeScanned : undefined}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <View style={styles.scannerOverlay}>
-            <View style={styles.scannerTarget}>
-              <View style={[styles.targetCorner, styles.targetTL]} />
-              <View style={[styles.targetCorner, styles.targetTR]} />
-              <View style={[styles.targetCorner, styles.targetBL]} />
-              <View style={[styles.targetCorner, styles.targetBR]} />
-              <Animated.View style={[styles.scannerLaser, scanLineAnim]} />
+      <Modal visible={scannerVisible} animationType="slide" onRequestClose={() => setScannerVisible(false)}>
+        {scannerVisible && (
+          <View style={styles.scannerModalMain}>
+            <CameraView
+              facing="back"
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr"],
+              }}
+              onBarcodeScanned={handleBarCodeScanned}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <View style={styles.scannerOverlay}>
+              <View style={styles.scannerTarget}>
+                <View style={[styles.targetCorner, styles.targetTL]} />
+                <View style={[styles.targetCorner, styles.targetTR]} />
+                <View style={[styles.targetCorner, styles.targetBL]} />
+                <View style={[styles.targetCorner, styles.targetBR]} />
+                <Animated.View style={[styles.scannerLaser, scanLineAnim]} />
+              </View>
+              <Text style={styles.scannerHint}>Align Payment QR inside the box</Text>
+              <TouchableOpacity onPress={() => setScannerVisible(false)} style={styles.scannerCloseBtn}>
+                <Text style={styles.scannerCloseText}>Cancel</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.scannerHint}>Align Payment QR inside the box</Text>
-            <TouchableOpacity onPress={() => setScannerVisible(false)} style={styles.scannerCloseBtn}>
-              <Text style={styles.scannerCloseText}>Cancel</Text>
-            </TouchableOpacity>
           </View>
-        </View>
+        )}
       </Modal>
 
       {/* Doorstep Delivery Photo Camera Modal */}
-      <Modal visible={showCamera} animationType="slide" transparent={false}>
-        <View style={styles.deliveryCameraContainer}>
-          <View style={styles.deliveryCameraHeader}>
-            <TouchableOpacity onPress={() => setShowCamera(false)} style={styles.deliveryCameraCloseBtn}>
-              <MaterialCommunityIcons name="close" size={28} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.deliveryCameraTitle}>Doorstep Photo</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          <CameraView 
-            ref={cameraRef}
-            style={styles.deliveryCameraView}
-            facing="back"
-          >
-            <View style={styles.deliveryCameraFooter}>
-              <Text style={styles.deliveryCameraHint}>Make sure items are clearly visible</Text>
-              <TouchableOpacity onPress={capturePhoto} style={styles.deliveryCaptureBtnOuter}>
-                <View style={styles.deliveryCaptureBtnInner} />
+      <Modal visible={showCamera} animationType="slide" transparent={false} onRequestClose={() => setShowCamera(false)}>
+        {showCamera && (
+          <View style={styles.deliveryCameraContainer}>
+            <View style={styles.deliveryCameraHeader}>
+              <TouchableOpacity onPress={() => setShowCamera(false)} style={styles.deliveryCameraCloseBtn}>
+                <MaterialCommunityIcons name="close" size={28} color="#FFFFFF" />
               </TouchableOpacity>
+              <Text style={styles.deliveryCameraTitle}>Doorstep Photo</Text>
+              <View style={{ width: 40 }} />
             </View>
-          </CameraView>
-        </View>
+
+            <CameraView 
+              ref={cameraRef}
+              style={styles.deliveryCameraView}
+              facing="back"
+            >
+              <View style={styles.deliveryCameraFooter}>
+                <Text style={styles.deliveryCameraHint}>Make sure items are clearly visible</Text>
+                <TouchableOpacity onPress={capturePhoto} style={styles.deliveryCaptureBtnOuter}>
+                  <View style={styles.deliveryCaptureBtnInner} />
+                </TouchableOpacity>
+              </View>
+            </CameraView>
+          </View>
+        )}
       </Modal>
 
     </View>

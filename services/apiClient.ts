@@ -1,8 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Hardcoded IP to bypass any terminal environment variables blocking connections
-const BASE_URL = 'http://13.48.104.248:9000';
+// Basic end point for production
+const BASE_URL = 'https://api.anushatechnologies.com';
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

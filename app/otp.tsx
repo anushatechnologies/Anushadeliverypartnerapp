@@ -17,9 +17,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { authService } from "../services/authService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
-import { firebase } from "./config/firebase";
+import auth from "@react-native-firebase/auth";
 import PremiumPopup, { PopupType } from "../components/PremiumPopup";
+import messaging from "@react-native-firebase/messaging";
 
 export default function OtpScreen() {
   const router = useRouter();
@@ -60,14 +60,28 @@ export default function OtpScreen() {
       if (!verificationId) throw new Error("Missing Verification ID");
       delete (global as any).firebaseBypass;
 
-      const credential = firebase.auth.PhoneAuthProvider.credential(verificationId as string, code);
-      const userCred = await firebase.auth().signInWithCredential(credential);
+      const credential = auth.PhoneAuthProvider.credential(verificationId as string, code);
+      const userCred = await auth().signInWithCredential(credential);
       const idToken = await userCred.user!.getIdToken();
 
       if (from === "login") {
         try {
+          // Fetch FCM Token for notifications
+          let fcmToken = "";
+          try {
+             const authStatus = await messaging().requestPermission();
+             const isGranted =
+               authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+               authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+             if (isGranted) {
+                 fcmToken = await messaging().getToken();
+             }
+          } catch(e) {
+             console.warn("FCM Token not fetched", e);
+          }
+
           // Backend Login
-          const loginRes = await authService.login(idToken);
+          const loginRes = await authService.login(idToken, fcmToken);
           if (loginRes.jwtToken) {
             await AsyncStorage.setItem('@anusha_jwt_token', loginRes.jwtToken);
           }
@@ -77,10 +91,15 @@ export default function OtpScreen() {
              vehicleType: "None", 
              photo: "https://ui-avatars.com/api/?name=Partner" 
           };
-          let verificationStatus = loginRes.approvalStatus?.toLowerCase() || "pending";
+          let verificationStatus = (loginRes.approvalStatus?.toLowerCase() as any) || "pending";
           
           await login(phone as string, additionalData, verificationStatus);
           setLoading(false);
+          
+          // Listen for FCM token refresh
+          messaging().onTokenRefresh((newToken) => {
+              authService.saveFcmToken(phone as string, newToken);
+          });
           
           setPopup({
             visible: true,
@@ -156,14 +175,14 @@ export default function OtpScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} bounces={false}>
         <View style={[styles.header, { paddingTop: insets.top + 20 }]}><Pressable style={styles.backBtn} onPress={() => router.back()}><Ionicons name="chevron-back" size={24} color="#1E293B" /></Pressable></View>
         <View style={styles.content}>
-            <View style={styles.titleSection}><Text style={styles.title}>Verification Code</Text><Text style={styles.subtitle}>We've sent a 6-digit code to{"\n"}<Text style={styles.phoneHighlight}>+91 {phone}</Text></Text></View>
+            <View style={styles.titleSection}><Text style={styles.title}>Verification Code</Text><Text style={styles.subtitle}>We&apos;ve sent a 6-digit code to{"\n"}<Text style={styles.phoneHighlight}>+91 {phone}</Text></Text></View>
             <TextInput ref={inputRef} style={styles.hiddenInput} keyboardType="number-pad" maxLength={6} value={code} onChangeText={(v) => setCode(v.replace(/[^0-9]/g, ""))} textContentType="oneTimeCode" autoComplete="sms-otp" autoFocus />
             {renderOtpBoxes()}
             <Pressable style={({ pressed }) => [styles.primaryButton, code.length !== 6 && styles.buttonDisabled, pressed && styles.buttonPressed]} onPress={verifyOtpCode} disabled={code.length !== 6 || loading}>
                 {loading ? <ActivityIndicator color="#fff" /> : <><Text style={styles.buttonText}>Verify & Continue</Text><Ionicons name="checkmark-circle" size={20} color="#fff" /></>}
             </Pressable>
             <View style={styles.resendSection}>
-                <Text style={styles.resendText}>Didn't receive the code?</Text>
+                <Text style={styles.resendText}>Didn&apos;t receive the code?</Text>
                 {canResend ? <Pressable onPress={resendOtp}><Text style={styles.resendAction}>Resend Code</Text></Pressable> : <Text style={styles.timerText}>Resend in <Text style={styles.timerBold}>{resendTimer}s</Text></Text>}
             </View>
         </View>

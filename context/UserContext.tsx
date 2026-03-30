@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { profileService } from "../services/profileService";
+import { authService } from "../services/authService";
+import messaging from "@react-native-firebase/messaging";
 
 export type VerificationStatus = "pending" | "approved" | "rejected" | null;
 
@@ -10,6 +12,8 @@ export type UserProfile = {
   name: string;
   phone: string;
   vehicleType: string;
+  vehicleModel?: string;
+  registrationNumber?: string;
   photo: string | null;
   aadhaar?: string;
   pan?: string;
@@ -72,7 +76,14 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                   setAuthState(prev => {
                      const updated = {
                        ...prev,
-                       user: { ...prev.user, id: p.id, name: `${p.firstName} ${p.lastName}`, vehicleType: p.vehicleType },
+                       user: { 
+                          ...prev.user, 
+                          id: p.id, 
+                          name: `${p.firstName} ${p.lastName}`, 
+                          vehicleType: p.vehicleType,
+                          vehicleModel: p.vehicleModel,
+                          registrationNumber: p.registrationNumber
+                       },
                        verificationStatus: p.approvalStatus?.toLowerCase() || prev.verificationStatus
                      };
                      AsyncStorage.setItem(STORAGE_KEYS.PROFILE_STATE, JSON.stringify({ user: updated.user, verificationStatus: updated.verificationStatus })).catch(()=>{});
@@ -80,6 +91,13 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                   });
                }
             }).catch(e => console.warn("Background sync failed", e));
+
+            // SYNC FCM TOKEN WITH ADMIN (Background sync quietly)
+            if (cachedProfile.user?.phone) {
+               messaging().getToken()
+                  .then(tk => { if (tk) return authService.saveFcmToken(cachedProfile.user.phone, tk); })
+                  .catch(() => {});
+            }
             return; // We have successfully logged them in instantly
          } else if (token) {
             // Token exists but cache was cleared, wait for network sync
@@ -92,6 +110,8 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                    name: `${p.firstName} ${p.lastName}`,
                    phone: p.phoneNumber,
                    vehicleType: p.vehicleType,
+                   vehicleModel: p.vehicleModel || "",
+                   registrationNumber: p.registrationNumber || "",
                    photo: null,
                  },
                  verificationStatus: p.approvalStatus?.toLowerCase() || null,
@@ -100,6 +120,13 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                };
                setAuthState(newState as any);
                await AsyncStorage.setItem(STORAGE_KEYS.PROFILE_STATE, JSON.stringify({ user: newState.user, verificationStatus: newState.verificationStatus }));
+               
+               // SYNC FCM TOKEN (Network Refresh Path)
+               if (p.phoneNumber) {
+                  messaging().getToken()
+                    .then(tk => { if (tk) return authService.saveFcmToken(p.phoneNumber, tk); })
+                    .catch(() => {});
+               }
                return;
             }
          }

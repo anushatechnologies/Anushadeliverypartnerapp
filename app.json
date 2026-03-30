@@ -1,20 +1,26 @@
 {
   "expo": {
-    "name": "AnushaBazaar Partner",
+    "name": "Anusha Delivery Partner",
     "slug": "anushabazaar",
     "scheme": "anushabazaar",
-    "version": "1.0.0",
+    "version": "2.4.3",
+    "icon": "./assets/icon.png",
     "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
       "backgroundColor": "#F8FAFC"
     },
-    "icon": "./assets/banner1.png",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
       "**/*"
     ],
     "android": {
-      "package": "com.anusha.deliveryapp",
-      "usesCleartextTraffic": true,
+      "versionCode": 62,
+      "package": "com.Anushadeliverypartner",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
@@ -45,9 +51,9 @@
         {
           "android": {
             "minSdkVersion": 24,
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
-            "buildToolsVersion": "34.0.0",
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
             "usesCleartextTraffic": true
           },
           "ios": {
@@ -58,8 +64,14 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "50351285-14db-4205-af7d-08a0d052b069"
+        "projectId": "9c5e08d3-3d47-4cbc-ae48-6e715cae0fdf"
       }
     }
   }
 }
+
+
+
+
+
+

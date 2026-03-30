@@ -28,9 +28,10 @@ import { documentService } from "../services/documentService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown, FadeInUp, ZoomIn } from "react-native-reanimated";
 import { StatusBar } from "expo-status-bar";
-import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
-import { firebase, firebaseConfig } from "./config/firebase";
+import auth from "@react-native-firebase/auth";
+import { firebase } from "./config/firebase";
 import PremiumPopup, { PopupType } from "../components/PremiumPopup";
+import messaging from "@react-native-firebase/messaging";
 
 const { width } = Dimensions.get("window");
 
@@ -39,12 +40,12 @@ export default function RegisterScreen() {
   const params = useLocalSearchParams();
   const { login } = useUser();
   const [loading, setLoading] = useState(false);
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
 
   // Form State
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState((params.phone as string) || (params.defaultPhone as string) || "");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [idToken, setIdToken] = useState<string | null>((params.idToken as string) || null);
   
   // OTP State
@@ -81,9 +82,21 @@ export default function RegisterScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
+  // Phone Formatting Handler
+  const handlePhoneChange = (text: string) => {
+    const cleaned = text.replace(/[^0-9]/g, "");
+    setPhone(cleaned.slice(0, 10));
+  };
+
+  // Format phone display as XXXXX XXXXX
+  const getFormattedPhone = (raw: string) => {
+    if (raw.length <= 5) return raw;
+    return `${raw.slice(0, 5)} ${raw.slice(5)}`;
+  };
+
   // Formatting Handlers
   const handleAadhaarChange = (text: string) => {
-    const cleaned = text.replace(/[^0-9]/g, ""); // Keep only digits
+    const cleaned = text.replace(/[^0-9]/g, "");
     let formatted = "";
     for (let i = 0; i < cleaned.length; i++) {
       if (i > 0 && i % 4 === 0) formatted += " ";
@@ -92,12 +105,53 @@ export default function RegisterScreen() {
     setAadhaar(formatted.slice(0, 14)); // 12 digits + 2 spaces
   };
 
+  // PAN: ABCDE1234F pattern — 5 letters, 4 digits, 1 letter
   const handlePanChange = (text: string) => {
-    setPan(text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)); // 10 chars max
+    const upper = text.toUpperCase();
+    let result = "";
+    for (let i = 0; i < upper.length && result.length < 10; i++) {
+      const ch = upper[i];
+      if (result.length < 5) {
+        // First 5 must be letters
+        if (/[A-Z]/.test(ch)) result += ch;
+      } else if (result.length < 9) {
+        // Next 4 must be digits
+        if (/[0-9]/.test(ch)) result += ch;
+      } else {
+        // Last 1 must be letter
+        if (/[A-Z]/.test(ch)) result += ch;
+      }
+    }
+    setPan(result);
   };
 
+  // DL: State code (2 letters) + optional hyphen + remaining alphanumeric
   const handleLicenseChange = (text: string) => {
-    setLicense(text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16)); // 16 chars max
+    const upper = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    setLicense(upper.slice(0, 16));
+  };
+
+  // Format helpers for display hints
+  const getAadhaarFormatHint = () => {
+    const digits = aadhaar.replace(/\s/g, "").length;
+    if (digits === 0) return "Enter 12-digit Aadhaar number";
+    if (digits < 12) return `${digits}/12 digits entered`;
+    return "✓ Valid format";
+  };
+
+  const getPanFormatHint = () => {
+    if (pan.length === 0) return "Format: ABCDE1234F (5 letters, 4 digits, 1 letter)";
+    if (pan.length < 5) return `${pan.length}/5 letters entered...`;
+    if (pan.length < 9) return `Letters ✓ — ${pan.length - 5}/4 digits entered...`;
+    if (pan.length < 10) return "Letters ✓ Digits ✓ — Enter last letter";
+    if (/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan)) return "✓ Valid PAN format";
+    return "✗ Invalid format";
+  };
+
+  const getLicenseFormatHint = () => {
+    if (license.length === 0) return "Format: AP0320260001234";
+    if (license.length < 5) return `${license.length} characters entered...`;
+    return `${license.length}/16 characters — ${license.length >= 10 ? '✓ Valid length' : 'keep typing...'}`;
   };
 
   // Logic Handlers
@@ -177,12 +231,13 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      const phoneProvider = new firebase.auth.PhoneAuthProvider();
-      const vId = await phoneProvider.verifyPhoneNumber(`+91${phone}`, recaptchaVerifier.current!);
-      setVerificationId(vId);
+      const confirmation = await auth().signInWithPhoneNumber(`+91${phone}`);
+      setVerificationId(confirmation.verificationId);
       setIsOtpSent(true);
       Alert.alert("OTP Sent", "Verification code sent to your mobile.");
-      setTimeout(() => otpInputRef.current?.focus(), 500); // auto focus OTP boxes
+      setTimeout(() => {
+        otpInputRef.current?.focus();
+      }, 300); // Faster focus for better UX
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to send OTP.");
     } finally {
@@ -196,8 +251,8 @@ export default function RegisterScreen() {
 
     try {
       if (!verificationId) throw new Error("Missing Verification ID");
-      const credential = firebase.auth.PhoneAuthProvider.credential(verificationId as string, otp);
-      const userCred = await firebase.auth().signInWithCredential(credential);
+      const credential = auth.PhoneAuthProvider.credential(verificationId as string, otp);
+      const userCred = await auth().signInWithCredential(credential);
       const token = await userCred.user!.getIdToken();
       
       setIdToken(token);
@@ -233,59 +288,114 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      // PROACTIVELY UPLOAD TO FIREBASE STORAGE FOR PUBLIC URL
-      let finalProfileUrl = `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=random`;
+      // REFRESH FIREBASE ID TOKEN (prevents expired token errors)
+      let activeIdToken = idToken;
       try {
-        const base64 = await FileSystem.readAsStringAsync(profilePhoto, { encoding: 'base64' });
-        const ref = firebase.storage().ref().child(`profiles/${phone}_${Date.now()}.jpg`);
-        await ref.putString(`data:image/jpeg;base64,${base64}`, 'data_url');
-        finalProfileUrl = await ref.getDownloadURL();
-      } catch (photoUploadError) {
-        // Silently catch Firebase unconfigured errors since backend accepts the avatar URL payload
+        const currentUser = auth().currentUser;
+        if (currentUser) {
+          activeIdToken = await currentUser.getIdToken(true); // Force refresh
+          setIdToken(activeIdToken);
+        }
+      } catch (tokenRefreshErr) {
+        console.warn("Token refresh failed, using existing token:", tokenRefreshErr);
       }
 
+      // PROACTIVELY UPLOAD TO FIREBASE STORAGE FOR PUBLIC URL (with 10s timeout)
+      let finalProfileUrl = `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=random`;
+      try {
+        const uploadPromise = (async () => {
+          const base64 = await FileSystem.readAsStringAsync(profilePhoto, { encoding: 'base64' });
+          const ref = firebase.storage().ref().child(`profiles/${phone}_${Date.now()}.jpg`);
+          await ref.putString(`data:image/jpeg;base64,${base64}`, 'data_url');
+          return await ref.getDownloadURL();
+        })();
+        
+        const timeoutPromise = new Promise<string>((_, reject) => 
+          setTimeout(() => reject(new Error("Firebase Storage upload timed out")), 10000)
+        );
+        
+        finalProfileUrl = await Promise.race([uploadPromise, timeoutPromise]);
+      } catch (photoUploadError: any) {
+        console.warn("Firebase Storage upload skipped:", photoUploadError?.message);
+        // Continue with fallback avatar URL
+      }
+
+      // FETCH FCM TOKEN
+      let fcmToken = "";
+      try {
+         const authStatus = await messaging().requestPermission();
+         const isGranted =
+           authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+           authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+         if (isGranted) {
+            fcmToken = await messaging().getToken();
+         }
+      } catch(e: any) {
+         console.warn("FCM get token failed", e);
+      }
+
+      console.log("[Register] Calling signup API...");
       const signupRes = await authService.signup({
-         firebaseIdToken: idToken,
+         firebaseIdToken: activeIdToken,
          firstName,
          lastName,
          vehicleType: vehicle.toUpperCase(),
          vehicleModel: vehicleModel || "Not Specified",
          registrationNumber: registrationNumber || "Pending Validation",
-         profilePhotoUrl: finalProfileUrl
+         profilePhotoUrl: finalProfileUrl,
+         fcmToken
       });
+      console.log("[Register] Signup API response:", JSON.stringify(signupRes));
       
       const deliveryPersonId = signupRes.deliveryPersonId;
       if (signupRes.jwtToken) await AsyncStorage.setItem('@anusha_jwt_token', signupRes.jwtToken);
 
-      if (aadhaarPhoto) await documentService.uploadDocument(deliveryPersonId, 'AADHAAR_CARD', aadhaar.replace(/ /g, ""), aadhaarPhoto);
-      if (panPhoto) await documentService.uploadDocument(deliveryPersonId, 'PAN_CARD', pan, panPhoto);
-      if (licensePhoto) await documentService.uploadDocument(deliveryPersonId, 'DRIVING_LICENSE', license, licensePhoto);
+      // Upload documents in parallel with allSettled (so one failure doesn't block others)
+      console.log("[Register] Uploading documents for deliveryPersonId:", deliveryPersonId);
+      const docUploads = await Promise.allSettled([
+        aadhaarPhoto ? documentService.uploadDocument(deliveryPersonId, 'AADHAAR_CARD', aadhaar.replace(/ /g, ""), aadhaarPhoto) : Promise.resolve(),
+        panPhoto ? documentService.uploadDocument(deliveryPersonId, 'PAN_CARD', pan, panPhoto) : Promise.resolve(),
+        licensePhoto ? documentService.uploadDocument(deliveryPersonId, 'DRIVING_LICENSE', license, licensePhoto) : Promise.resolve(),
+        profilePhoto ? documentService.uploadDocument(deliveryPersonId, 'PROFILE_PHOTO', phone, profilePhoto) : Promise.resolve(),
+      ]);
+      
+      // Log any failed document uploads (non-blocking)
+      docUploads.forEach((result, idx) => {
+        const labels = ['Aadhaar', 'PAN', 'License', 'Profile Photo'];
+        if (result.status === 'rejected') {
+          console.warn(`[Register] ${labels[idx]} upload failed:`, result.reason?.message || result.reason);
+        } else {
+          console.log(`[Register] ${labels[idx]} upload successful`);
+        }
+      });
 
-      if (profilePhoto) {
-         try {
-            await documentService.uploadDocument(deliveryPersonId, 'PROFILE_PHOTO', phone, profilePhoto);
-         } catch (photoErr) {
-            console.warn("Failed to upload profile photo:", photoErr);
-         }
-      }
-
+      console.log("[Register] Saving login state...");
       await login(phone, {
         name: `${firstName} ${lastName}`,
         phone, vehicleType: vehicle, photo: profilePhoto, aadhaar, pan, license, aadhaarPhoto, panPhoto, licensePhoto,
       }, "pending");
       
-      Alert.alert("Success!", "Application submitted for verification.", [
-        { text: "Done", onPress: () => router.replace("/verification") }
-      ]);
+      console.log("[Register] Registration complete, navigating...");
+      setLoading(false);
+      
+      // Show professional success modal
+      setShowSuccessModal(true);
+      
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        router.replace("/verification");
+      }, 3500);
+      return; // Skip the finally block's setLoading since we already set it above
+      
     } catch (err: any) {
+      console.warn("[Register] Full error object:", JSON.stringify(err?.response?.data || err?.message || err));
       const apiError = err?.response?.data?.message || err?.response?.data?.error || err?.message;
       if (apiError?.toLowerCase()?.includes("already registered") || apiError?.toLowerCase()?.includes("login")) {
          Alert.alert("Account Found", "This phone number is already registered in our system.", [
            { text: "Go to Login", onPress: () => router.replace("/login") }
          ]);
       } else {
-         console.warn("API Flow Error:", apiError);
-         Alert.alert("Submission Error", `${apiError}`);
+         Alert.alert("Submission Error", `${apiError || "An unexpected error occurred. Please try again."}`);
       }
     } finally {
       setLoading(false);
@@ -302,7 +412,7 @@ export default function RegisterScreen() {
     </View>
   );
 
-  const renderDocUpload = (title: string, value: string, onChange: (t: string) => void, placeholder: string, photo: string | null, onPick: () => void, kbType: any = "default", maxLength?: number) => (
+  const renderDocUpload = (title: string, value: string, onChange: (t: string) => void, placeholder: string, photo: string | null, onPick: () => void, kbType: any = "default", maxLength?: number, formatHint?: string) => (
     <View style={styles.docCard}>
       <View style={styles.docHeader}>
         <View>
@@ -321,6 +431,9 @@ export default function RegisterScreen() {
           <MaterialCommunityIcons name="card-text-outline" size={20} color="#0A8754" style={styles.inputIcon} />
           <TextInput style={styles.textInput} placeholder={placeholder} placeholderTextColor="#94A3B8" value={value} onChangeText={onChange} keyboardType={kbType} maxLength={maxLength} selectionColor="#0A8754" />
         </View>
+        {formatHint && (
+          <Text style={styles.formatHintText}>{formatHint}</Text>
+        )}
       </View>
 
       <TouchableOpacity onPress={onPick} style={[styles.uploadButton, photo && styles.uploadButtonDone]}>
@@ -348,8 +461,6 @@ export default function RegisterScreen() {
     <View style={styles.container}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safe}>
-        <FirebaseRecaptchaVerifierModal ref={recaptchaVerifier} firebaseConfig={firebaseConfig} attemptInvisibleVerification={false} />
-        
         {/* Dynamic Background Blob */}
         <View style={styles.bgBlobPrimary} />
 
@@ -394,9 +505,18 @@ export default function RegisterScreen() {
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>MOBILE NUMBER</Text>
                 <View style={styles.phoneBox}>
-                  <View style={styles.phonePrefix}><Text style={styles.prefixText}>+91</Text></View>
+                  <View style={styles.phonePrefix}><Text style={styles.prefixText}>🇮🇳 +91</Text></View>
                   <View style={styles.inputDivider} />
-                  <TextInput style={styles.phoneInput} placeholder="99999 99999" placeholderTextColor="#94A3B8" keyboardType="number-pad" maxLength={10} value={phone} onChangeText={setPhone} editable={!isOtpSent && !isPhoneVerified} />
+                  <TextInput 
+                    style={styles.phoneInput} 
+                    placeholder="99999 99999" 
+                    placeholderTextColor="#94A3B8" 
+                    keyboardType="number-pad" 
+                    maxLength={11}
+                    value={getFormattedPhone(phone)} 
+                    onChangeText={(text) => handlePhoneChange(text.replace(/\s/g, ""))}
+                    editable={!isOtpSent && !isPhoneVerified} 
+                  />
                   
                   {isPhoneVerified ? (
                     <Animated.View entering={ZoomIn}><MaterialCommunityIcons name="check-decagram" size={24} color="#0A8754" /></Animated.View>
@@ -408,6 +528,9 @@ export default function RegisterScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
+                {phone.length > 0 && phone.length < 10 && (
+                  <Text style={styles.formatHintText}>{phone.length}/10 digits entered</Text>
+                )}
               </View>
 
               {/* Advanced Segmented OTP Box */}
@@ -415,7 +538,13 @@ export default function RegisterScreen() {
                 <Animated.View entering={FadeInDown.duration(400)} style={styles.otpOuterContainer}>
                   <Text style={[styles.inputLabel, { textAlign: 'center', marginBottom: 12 }]}>ENTER 6-DIGIT CODE</Text>
                   
-                  <Pressable onPress={() => otpInputRef.current?.focus()} style={styles.otpBoxContainer}>
+                  <Pressable 
+                    onPress={() => {
+                       setIsOtpFocused(true);
+                       otpInputRef.current?.focus();
+                    }} 
+                    style={styles.otpBoxContainer}
+                  >
                     {[0, 1, 2, 3, 4, 5].map((index) => {
                       const isActive = (otp.length === index && isOtpFocused) || (otp.length === 6 && index === 5 && isOtpFocused);
                       return (
@@ -478,9 +607,9 @@ export default function RegisterScreen() {
             {/* Step 3: Documents */}
             <Animated.View entering={FadeInUp.delay(300).duration(600).springify()} style={styles.sectionContainer}>
                <Text style={[styles.inputLabel, { marginBottom: 16 }]}>KYC DOCUMENTS</Text>
-               {renderDocUpload("Aadhaar Card", aadhaar, handleAadhaarChange, "XXXX XXXX XXXX", aadhaarPhoto, () => openPicker(setAadhaarPhoto, "Aadhaar Card"), "number-pad", 14)}
-               {renderDocUpload("PAN Card", pan, handlePanChange, "ABCDE1234F", panPhoto, () => openPicker(setPanPhoto, "PAN Card"), "default", 10)}
-               {renderDocUpload("Driving License", license, handleLicenseChange, "AP03 20261234567", licensePhoto, () => openPicker(setLicensePhoto, "Driving License"), "default", 16)}
+               {renderDocUpload("Aadhaar Card", aadhaar, handleAadhaarChange, "XXXX XXXX XXXX", aadhaarPhoto, () => openPicker(setAadhaarPhoto, "Aadhaar Card"), "number-pad", 14, getAadhaarFormatHint())}
+               {renderDocUpload("PAN Card", pan, handlePanChange, "ABCDE1234F", panPhoto, () => openPicker(setPanPhoto, "PAN Card"), "default", 10, getPanFormatHint())}
+               {renderDocUpload("Driving License", license, handleLicenseChange, "AP0320260001234", licensePhoto, () => openPicker(setLicensePhoto, "Driving License"), "default", 16, getLicenseFormatHint())}
             </Animated.View>
 
             <Pressable 
@@ -497,33 +626,75 @@ export default function RegisterScreen() {
             </Pressable>
 
           </ScrollView>
+
+        {/* Professional Success Modal */}
+        <Modal visible={showSuccessModal} transparent animationType="none">
+          <View style={styles.successOverlay}>
+            <Animated.View entering={ZoomIn.springify().damping(15)} style={styles.successCard}>
+              <View style={styles.successIconOuter}>
+                <View style={styles.successIconRing}>
+                  <View style={styles.successIconInner}>
+                    <MaterialCommunityIcons name="check-bold" size={48} color="#FFFFFF" />
+                  </View>
+                </View>
+              </View>
+              
+              <Animated.View entering={FadeInUp.delay(300).duration(500)}>
+                <Text style={styles.successTitle}>🎉 Application Submitted!</Text>
+                <Text style={styles.successSubtitle}>Congratulations! Your partner application has been successfully submitted.</Text>
+              </Animated.View>
+
+              <Animated.View entering={FadeInUp.delay(500).duration(500)} style={styles.successInfoBox}>
+                <View style={styles.successInfoRow}>
+                  <MaterialCommunityIcons name="clock-check-outline" size={20} color="#7C3AED" />
+                  <Text style={styles.successInfoText}>Verification takes 24-48 hours</Text>
+                </View>
+                <View style={styles.successInfoRow}>
+                  <MaterialCommunityIcons name="bell-ring-outline" size={20} color="#7C3AED" />
+                  <Text style={styles.successInfoText}>You'll be notified once approved</Text>
+                </View>
+                <View style={styles.successInfoRow}>
+                  <MaterialCommunityIcons name="shield-check-outline" size={20} color="#7C3AED" />
+                  <Text style={styles.successInfoText}>All documents are securely stored</Text>
+                </View>
+              </Animated.View>
+
+              <Animated.View entering={FadeInUp.delay(700).duration(400)} style={styles.successRedirectRow}>
+                <ActivityIndicator size="small" color="#7C3AED" />
+                <Text style={styles.successRedirectText}>Redirecting to verification status...</Text>
+              </Animated.View>
+            </Animated.View>
+          </View>
+        </Modal>
         </KeyboardAvoidingView>
 
         {/* Custom Selfie Camera Modal */}
-        <Modal visible={showCamera} animationType="slide" transparent={false}>
-          <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
-            <View style={styles.cameraHeader}>
-              <TouchableOpacity onPress={() => setShowCamera(false)} style={styles.closeCameraBtn}>
-                <MaterialCommunityIcons name="close" size={28} color="#fff" />
-              </TouchableOpacity>
-              <Text style={styles.cameraTitle}>Face Recognition</Text>
-              <View style={{ width: 40 }} />
-            </View>
-            
-            <View style={styles.cameraContainer}>
-               <CameraView ref={cameraRef} style={styles.cameraPreview} facing="front" />
-               <View style={[styles.cameraOverlay, StyleSheet.absoluteFillObject]} pointerEvents="none">
-                  <View style={styles.faceTargetOutline} />
-               </View>
-            </View>
+        <Modal visible={showCamera} animationType="slide" transparent={false} onRequestClose={() => setShowCamera(false)}>
+          {showCamera && (
+            <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
+              <View style={styles.cameraHeader}>
+                <TouchableOpacity onPress={() => setShowCamera(false)} style={styles.closeCameraBtn}>
+                  <MaterialCommunityIcons name="close" size={28} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.cameraTitle}>Face Recognition</Text>
+                <View style={{ width: 40 }} />
+              </View>
+              
+              <View style={styles.cameraContainer}>
+                 <CameraView ref={cameraRef} style={styles.cameraPreview} facing="front" />
+                 <View style={[styles.cameraOverlay, StyleSheet.absoluteFillObject]} pointerEvents="none">
+                    <View style={styles.faceTargetOutline} />
+                 </View>
+              </View>
 
-            <View style={styles.cameraFooter}>
-              <TouchableOpacity onPress={handleCaptureSelfie} style={styles.captureBtn}>
-                 <View style={styles.captureInnerBtn} />
-              </TouchableOpacity>
-              <Text style={{ color: "#fff", opacity: 0.8 }}>Ensure good lighting for verification</Text>
-            </View>
-          </SafeAreaView>
+              <View style={styles.cameraFooter}>
+                <TouchableOpacity onPress={handleCaptureSelfie} style={styles.captureBtn}>
+                   <View style={styles.captureInnerBtn} />
+                </TouchableOpacity>
+                <Text style={{ color: "#fff", opacity: 0.8 }}>Ensure good lighting for verification</Text>
+              </View>
+            </SafeAreaView>
+          )}
         </Modal>
 
         {/* Dynamic Image Picker Bottom Sheet */}
@@ -595,10 +766,10 @@ const styles = StyleSheet.create({
   inputIcon: { marginRight: 12, opacity: 0.8 },
   textInput: { flex: 1, color: "#0F172A", fontSize: 16, fontWeight: "700", letterSpacing: 0.5 },
   phoneBox: { flexDirection: "row", alignItems: "center", backgroundColor: "#F8FAFC", borderRadius: 16, height: 58, paddingHorizontal: 16, borderWidth: 1.5, borderColor: "#E2E8F0" },
-  phonePrefix: { marginRight: 14 },
-  prefixText: { color: "#334155", fontWeight: "800", fontSize: 16 },
-  inputDivider: { width: 1.5, height: "40%", backgroundColor: "#CBD5E1", marginRight: 14 },
-  phoneInput: { flex: 1, color: "#0F172A", fontSize: 17, fontWeight: "800", letterSpacing: 1 },
+  phonePrefix: { justifyContent: "center", alignItems: "center", marginRight: 10 },
+  prefixText: { color: "#334155", fontWeight: "800", fontSize: 16, lineHeight: 20 },
+  inputDivider: { width: 1.5, height: 24, backgroundColor: "#CBD5E1", marginRight: 10 },
+  phoneInput: { flex: 1, color: "#0F172A", fontSize: 17, fontWeight: "800", letterSpacing: 1, height: '100%', paddingVertical: 0, textAlignVertical: "center" },
   phoneActionLight: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: "#F1F5F9" },
   phoneAction: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: "#CBD5E1" },
   phoneActionActive: { backgroundColor: "#0A8754", elevation: 4, shadowColor: "#0A8754", shadowOpacity: 0.3, shadowRadius: 8 },
@@ -629,6 +800,7 @@ const styles = StyleSheet.create({
   docHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
   docTitle: { color: "#0F172A", fontSize: 16, fontWeight: "800" },
   docSubtitle: { color: "#64748B", fontSize: 12, marginTop: 4, fontWeight: "500" },
+  formatHintText: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 6, marginLeft: 4, letterSpacing: 0.3 },
   uploadButton: { height: 140, borderRadius: 16, backgroundColor: "#FFFFFF", borderWidth: 2, borderColor: "#E2E8F0", borderStyle: "dashed", overflow: "hidden", justifyContent: "center", alignItems: "center" },
   uploadButtonDone: { borderStyle: "solid", borderColor: "#0A8754" },
   uploadPlaceholder: { alignItems: "center", gap: 8 },
@@ -663,5 +835,19 @@ const styles = StyleSheet.create({
   actionCardTitle: { color: '#0F172A', fontSize: 16, fontWeight: '800' },
   actionCardSub: { color: '#94A3B8', fontSize: 12, fontWeight: '600', marginTop: 2 },
   sheetCancelBtn: { height: 60, borderRadius: 20, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  sheetCancelText: { color: '#475569', fontSize: 16, fontWeight: '800' }
+  sheetCancelText: { color: '#475569', fontSize: 16, fontWeight: '800' },
+
+  // Professional Success Modal
+  successOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.85)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  successCard: { backgroundColor: '#FFFFFF', borderRadius: 40, padding: 36, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.2, shadowRadius: 40, elevation: 24 },
+  successIconOuter: { marginBottom: 28 },
+  successIconRing: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#BBF7D0' },
+  successIconInner: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#0A8754', justifyContent: 'center', alignItems: 'center', shadowColor: '#0A8754', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  successTitle: { fontSize: 24, fontWeight: '900', color: '#0F172A', textAlign: 'center', marginBottom: 12, letterSpacing: -0.5 },
+  successSubtitle: { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 22, fontWeight: '500', marginBottom: 24, paddingHorizontal: 10 },
+  successInfoBox: { width: '100%', backgroundColor: '#F8FAFC', borderRadius: 20, padding: 18, gap: 14, marginBottom: 24, borderWidth: 1, borderColor: '#F1F5F9' },
+  successInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  successInfoText: { fontSize: 13, color: '#475569', fontWeight: '600', flex: 1 },
+  successRedirectRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  successRedirectText: { fontSize: 13, color: '#7C3AED', fontWeight: '700' }
 });

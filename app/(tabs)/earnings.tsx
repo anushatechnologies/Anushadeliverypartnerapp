@@ -8,7 +8,8 @@ import {
   Pressable,
   TouchableOpacity as RNTouchableOpacity,
   Modal,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Animated, { FadeInDown, FadeInUp, ZoomIn } from "react-native-reanimated";
@@ -71,13 +72,12 @@ export default function Earnings() {
   }, [user?.id]);
 
   const earningsHistory = stats.payouts.length > 0 ? stats.payouts.map(p => ({
-    label: `Payout #${p.id || 'N/A'}`,
+    label: p.period || `Payout #${p.id || 'N/A'}`,
     amount: `₹${p.amount || 0}`,
     orders: p.ordersIncluded || 0,
     status: p.status || 'PROCESSED'
   })) : [
-    { label: "Feb 24 – Mar 02", amount: "₹1,250", orders: 32, status: 'MOCK' },
-    { label: "Feb 17 – Feb 23", amount: "₹980", orders: 25, status: 'MOCK' },
+    { label: "No Recent Payouts", amount: "₹0", orders: 0, status: 'NONE' },
   ];
 
   return (
@@ -87,8 +87,8 @@ export default function Earnings() {
         <PremiumHeader 
           title={t('earnings')}
           rightContent={
-            <TouchableOpacity onPress={handleWithdraw} style={styles.payoutBtn}>
-               <Text style={styles.payoutBtnText}>Withdraw</Text>
+            <TouchableOpacity onPress={() => Alert.alert("Coming Soon", "Withdrawal feature is coming soon! Stay tuned for updates.")} style={[styles.payoutBtn, { backgroundColor: '#94A3B8' }]}>
+               <Text style={styles.payoutBtnText}>Coming Soon</Text>
             </TouchableOpacity>
           }
         />
@@ -128,26 +128,7 @@ export default function Earnings() {
              </View>
           </Animated.View>
 
-          {/* Rate Card Section */}
-          <Text style={styles.sectionTitle}>Performance & Rate Card</Text>
-          <Animated.View entering={FadeInDown.delay(200).duration(600)} style={styles.rateCard}>
-             <View style={styles.rateRow}>
-                <MaterialCommunityIcons name="currency-inr" size={24} color="#00C853" />
-                <View style={{ flex: 1, marginLeft: 16 }}>
-                   <Text style={styles.rateLabel}>Base Fare</Text>
-                   <Text style={styles.rateValue}>₹40.00 / order</Text>
-                </View>
-                <MaterialCommunityIcons name="information-outline" size={20} color="#606060" />
-             </View>
-             <View style={[styles.rateRow, { marginTop: 20 }]}>
-                <MaterialCommunityIcons name="flash-outline" size={24} color="#FF9F0A" />
-                <View style={{ flex: 1, marginLeft: 16 }}>
-                   <Text style={styles.rateLabel}>Surge Bonus</Text>
-                   <Text style={styles.rateValue}>Up to ₹25.00 extra</Text>
-                </View>
-                <MaterialCommunityIcons name="information-outline" size={20} color="#606060" />
-             </View>
-          </Animated.View>
+          {/* Rate Card Removed as requested */}
 
           {/* Collapsible Earnings History */}
           <TouchableOpacity onPress={() => setShowHistory(!showHistory)} style={styles.collapsibleHeader}>

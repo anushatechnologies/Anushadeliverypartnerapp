@@ -12,7 +12,8 @@ import {
   Pressable,
   ImageBackground,
   RefreshControl,
-  TextInput
+  TextInput,
+  Linking
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -29,6 +30,7 @@ import Animated, {
   FadeInUp,
   FadeInLeft,
 } from "react-native-reanimated";
+import * as Location from "expo-location";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import PremiumPopup, { PopupType } from "../../components/PremiumPopup";
@@ -42,6 +44,8 @@ export default function Home() {
   const [active, setActive] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const user = authState.user;
   
   // Dashboard Data
   const [dashboard, setDashboard] = useState({ totalEarnings: 0, activeOrders: 0 });
@@ -50,14 +54,8 @@ export default function Home() {
     visible: false, type: "success", title: "", message: ""
   });
   
-  // Incoming Order State
-  const [incomingOrder, setIncomingOrder] = useState<{ id: string, vendor: string, location: string, distance: string, earnings: string } | null>({
-    id: "#ORD-8812",
-    vendor: "Anusha Fresh Mart",
-    location: "Kukatpally Phase 1",
-    distance: "2.4 km",
-    earnings: "₹65"
-  });
+  // Incoming Order State (Should fetch from backend in production)
+  const [incomingOrder, setIncomingOrder] = useState<{ id: string, vendor: string, location: string, distance: string, earnings: string, orderNumber: string } | null>(null);
   
   // Rejection State
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -71,21 +69,33 @@ export default function Home() {
   const fetchDashboard = async () => {
     if (!user?.id) return;
     try {
-      // Execute verified endpoints in parallel for maximum UI speed
-      const [statusRes, payoutsRes, ordersRes] = await Promise.all([
+      // Try the dedicated dashboard endpoint first (fastest, single call)
+      const [dashboardRes, statusRes] = await Promise.all([
+        profileService.getDashboard().catch(() => null),
         profileService.getStatus().catch(() => null),
-        payoutService.getTotalPaid(user.id).catch(() => 0),
-        orderService.getActiveOrders(user.id).catch(() => [])
       ]);
-      
-      const isOnline = statusRes?.deliveryPerson?.isOnline || false;
+
+      const isOnline = statusRes?.deliveryPerson?.isOnline
+        ?? dashboardRes?.dashboard?.isOnline
+        ?? false;
       setActive(isOnline);
 
-      setDashboard({
-        totalEarnings: typeof payoutsRes === 'number' ? payoutsRes : (payoutsRes?.totalPaid || 0),
-        activeOrders: Array.isArray(ordersRes) ? ordersRes.length : 0,
-      });
-
+      if (dashboardRes?.success && dashboardRes?.dashboard) {
+        setDashboard({
+          totalEarnings: dashboardRes.dashboard.totalEarnings ?? 0,
+          activeOrders: dashboardRes.dashboard.weeklyCompletedOrders ?? 0,
+        });
+      } else {
+        // Fallback: derive from payout + active-orders services
+        const [payoutsRes, ordersRes] = await Promise.all([
+          payoutService.getTotalPaid(user.id).catch(() => 0),
+          orderService.getActiveOrders(user.id).catch(() => []),
+        ]);
+        setDashboard({
+          totalEarnings: typeof payoutsRes === 'number' ? payoutsRes : (payoutsRes?.totalPaid || 0),
+          activeOrders: Array.isArray(ordersRes) ? ordersRes.length : 0,
+        });
+      }
     } catch (e: any) {
       console.warn("Failed to synchronize telemetry:", e.message);
     }
@@ -93,7 +103,35 @@ export default function Home() {
 
   useEffect(() => {
     fetchDashboard();
-  }, []);
+    
+    // START POLLING FOR NEW ORDERS & UPDATING LOCATION
+    const interval = setInterval(async () => {
+       if (active && user?.id) {
+          try {
+             // 1. POLLING FOR NEW ASSIGNED ORDER (Optional, if no WebSocket)
+             const activeOrders = await orderService.getActiveOrders(user.id);
+             
+             // 2. BACKGROUND GPS SYNC (Update location for first active order)
+             if (activeOrders && activeOrders.length > 0) {
+                const firstOrder = activeOrders[0];
+                const locStatus = await Location.requestForegroundPermissionsAsync();
+                if (locStatus.status === 'granted') {
+                   const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                   await orderService.updateLocation(
+                      firstOrder.orderNumber || firstOrder.id.toString(),
+                      loc.coords.latitude,
+                      loc.coords.longitude
+                   );
+                }
+             }
+          } catch(e) {
+             console.log("Background telemetry sync deferred");
+          }
+       }
+    }, 60000); // Pulse every 60 seconds
+
+    return () => clearInterval(interval);
+  }, [active, user?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -101,32 +139,52 @@ export default function Home() {
     setRefreshing(false);
   };
 
-  const handleAcceptOrder = () => {
-    Alert.alert("Order Accepted!", "The order has been moved to your Active Tasks.");
-    setIncomingOrder(null);
+  const handleAcceptOrder = async () => {
+    if (!incomingOrder) return;
+    setLoading(true);
+    try {
+       await orderService.acceptOrder(incomingOrder.orderNumber || incomingOrder.id);
+       Alert.alert("Order Accepted!", "The order has been moved to your Active Tasks.");
+       setIncomingOrder(null);
+       fetchDashboard(); // Refresh stats
+       router.push("/(tabs)/orders");
+    } catch (e: any) {
+       Alert.alert("Failed", "Could not accept order. It might have been assigned to someone else.");
+    } finally {
+       setLoading(false);
+    }
   };
 
-  const handleRejectOrderSubmit = () => {
+  const handleRejectOrderSubmit = async () => {
     const finalReason = rejectReason === "Other" ? customRejectReason : rejectReason;
     if (!finalReason.trim()) {
       Alert.alert("Reason Required", "Please specify a reason for rejecting the order.");
       return;
     }
     
-    // Add to history
-    if (incomingOrder) {
+    if (!incomingOrder) return;
+    setLoading(true);
+
+    try {
+      await orderService.rejectOrder(incomingOrder.orderNumber || incomingOrder.id);
+      
+      // Add to history
       setRejectedOrders(prev => [{
         id: incomingOrder.id,
         reason: finalReason,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }, ...prev]);
+      
+      setShowRejectModal(false);
+      setIncomingOrder(null);
+      setRejectReason("");
+      setCustomRejectReason("");
+      Alert.alert("Order Rejected", "We have notified the admin.");
+    } catch (e) {
+      Alert.alert("Failed", "Error notifying the server of rejection.");
+    } finally {
+      setLoading(false);
     }
-    
-    setShowRejectModal(false);
-    setIncomingOrder(null);
-    setRejectReason("");
-    setCustomRejectReason("");
-    Alert.alert("Order Rejected", "We have notified the admin.");
   };
 
   const toggleOnline = async () => {
@@ -143,22 +201,21 @@ export default function Home() {
         setPopup({
           visible: true,
           type: "error",
-          title: "Dashboard Locked",
-          message: "You cannot go online until your account is approved by the admin. Please ensure all documents are safely uploaded."
+          title: "Account Locked",
+          message: e?.response?.data?.error || "Check documents. Verification Pending."
         });
       } else {
         setPopup({
           visible: true,
           type: "error",
-          title: "Connection Issue",
-          message: "Failed to properly sync your duty status with the central server."
+          title: "Server Sync Failed",
+          message: "Check your internet connection or admin status."
         });
       }
       setTimeout(() => setPopup(prev => ({...prev, visible: false})), 3500);
     }
   };
 
-  const user = authState.user;
 
   const scrollRef = useRef<ScrollView>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -243,7 +300,7 @@ export default function Home() {
               onPress={() => router.push("/notifications")}
             >
               <MaterialCommunityIcons name="bell-ring-outline" size={22} color="#0F172A" />
-              <View style={styles.notifBadge} />
+              {rejectedOrders.length > 0 && <View style={styles.notifBadge} />}
             </TouchableOpacity>
           </View>
         </View>
@@ -391,55 +448,20 @@ export default function Home() {
             />
           </View>
 
-          {/* Live Demand */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('liveDemand')}</Text>
-            <View style={styles.liveIndicator}>
-              <View style={styles.pulseDot} />
-              <Text style={styles.liveText}>LIVE</Text>
-            </View>
-          </View>
 
-          <Animated.View entering={FadeInUp.delay(200)} style={styles.mapCardOuter}>
-            <View style={styles.mapCardInner}>
-              <MapView
-                provider={PROVIDER_DEFAULT}
-                style={styles.mapImg}
-                initialRegion={{
-                  latitude: 17.4399,
-                  longitude: 78.4983,
-                  latitudeDelta: 0.0922,
-                  longitudeDelta: 0.0421,
-                }}
-                scrollEnabled={false}
-              >
-                <Marker coordinate={{ latitude: 17.4399, longitude: 78.4983 }} />
-              </MapView>
-              <View style={[styles.mapOverlayBlur, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-                <View style={styles.demandBadge}>
-                  <MaterialCommunityIcons name="lightning-bolt" size={16} color="#fff" />
-                  <Text style={styles.demandText}>High Demand Area</Text>
-                </View>
-              </View>
-              <TouchableOpacity style={styles.mapExpandBtn}>
-                <MaterialCommunityIcons name="arrow-expand-all" size={20} color="#1A1A1A" />
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-
-          {/* Quick Actions */}
+          {/* Quick Actions Removed Placeholders as requested */}
           <View style={styles.quickGrid}>
             <QuickAction icon="wallet-outline" label="Earnings" color="#7C3AED" bg="#F5F3FF" onPress={() => router.push("/(tabs)/earnings")} />
             <QuickAction icon="clipboard-text-outline" label="Orders" color="#10B981" bg="#ECFDF5" onPress={() => router.push("/(tabs)/orders")} />
-            <QuickAction icon="account-group-outline" label="Refer" color="#F59E0B" bg="#FFFBEB" onPress={() => { }} />
             <QuickAction icon="headphones" label="Support" color="#EF4444" bg="#FEF2F2" onPress={() => setShowSupport(true)} />
+            <QuickAction icon="account-multiple-plus-outline" label="Refer & Earn" color="#F59E0B" bg="#FFFBEB" onPress={() => router.push("/refer")} />
           </View>
 
-          {/* Recent Rejections Section */}
+          {/* Recent Rejections Section (Matching Admin History) */}
           {rejectedOrders.length > 0 && (
             <Animated.View entering={FadeInUp.delay(300)}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Recent Rejections</Text>
+                <Text style={styles.sectionTitle}>Admin History Rejections</Text>
               </View>
               <View style={styles.rejectionsCard}>
                 {rejectedOrders.map((ro, i) => (
@@ -481,23 +503,23 @@ export default function Home() {
               <SupportTile
                 icon="phone-in-talk"
                 label="Call Support"
-                desc="Direct line to partner care"
+                desc="Call: 6309981555"
                 color="#4F46E5"
-                onPress={() => Alert.alert("Calling Support", "Connecting you to our team...")}
+                onPress={() => Linking.openURL('tel:6309981555')}
               />
               <SupportTile
-                icon="chat-processing"
+                icon="whatsapp"
                 label="Chat with Us"
-                desc="Instant message with agent"
-                color="#10B981"
-                onPress={() => Alert.alert("Opening Chat", "Starting a secure chat session...")}
+                desc="WhatsApp: 6309981555"
+                color="#25D366"
+                onPress={() => Linking.openURL('https://wa.me/916309981555?text=Hi%2C%20I%20need%20help%20with%20Anusha%20Bazaar%20Delivery%20Partner%20app')}
               />
               <SupportTile
                 icon="frequently-asked-questions"
                 label="View FAQs"
                 desc="Browse helpful articles"
                 color="#F59E0B"
-                onPress={() => Alert.alert("FAQs", "Opening help center...")}
+                onPress={() => { setShowSupport(false); router.push('/help'); }}
               />
             </View>
 

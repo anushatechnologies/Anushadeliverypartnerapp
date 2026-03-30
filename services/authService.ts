@@ -5,12 +5,19 @@ export const authService = {
     const res = await apiClient.get(`/api/delivery/auth/check-phone/${encodeURIComponent(phoneNumber)}`);
     return res.data;
   },
-  signup: async (data: { firebaseIdToken: string, firstName: string, lastName: string, vehicleType: string, vehicleModel: string, registrationNumber: string, profilePhotoUrl: string }) => {
+  signup: async (data: { firebaseIdToken: string, firstName: string, lastName: string, vehicleType: string, vehicleModel: string, registrationNumber: string, profilePhotoUrl: string, fcmToken?: string }) => {
     const res = await apiClient.post('/api/delivery/auth/signup', data);
     return res.data;
   },
-  login: async (firebaseIdToken: string) => {
-    const res = await apiClient.post('/api/delivery/auth/login', { firebaseIdToken });
+  login: async (firebaseIdToken: string, fcmToken?: string) => {
+    const res = await apiClient.post('/api/delivery/auth/login', { firebaseIdToken, fcmToken });
     return res.data;
+  },
+  saveFcmToken: async (phone: string, fcmToken: string) => {
+    try {
+      await apiClient.post('/api/save-token', { phone, fcmToken });
+    } catch(e) {
+      console.warn("FCM token save failed (non critical)", e);
+    }
   }
 };
