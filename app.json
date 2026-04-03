@@ -3,7 +3,7 @@
     "name": "Anusha Delivery Partner",
     "slug": "anushabazaar",
     "scheme": "anushabazaar",
-    "version": "2.4.3",
+    "version": "2.4.4",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
@@ -15,8 +15,8 @@
       "**/*"
     ],
     "android": {
-      "versionCode": 62,
-      "package": "com.Anushadeliverypartner",
+      "versionCode": 78,
+      "package": "com.Anushadeliverypartnerapp",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#FFFFFF"

@@ -1,8 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Basic end point for production
-const BASE_URL = 'https://api.anushatechnologies.com';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

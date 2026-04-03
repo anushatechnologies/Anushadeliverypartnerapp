@@ -468,6 +468,13 @@ export default function RegisterScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <MaterialCommunityIcons name="arrow-left" size={24} color="#0F172A" />
           </TouchableOpacity>
+          <View style={styles.headerLogoContainer}>
+            <Image 
+              source={require("../assets/icon.png")} 
+              style={styles.headerLogoImage} 
+              resizeMode="contain"
+            />
+          </View>
           <View style={styles.headerTextWrapper}>
             <Text style={styles.headerTitle}>Partner Setup</Text>
             <Text style={styles.headerSubtitle}>Join the delivery network</Text>
@@ -748,7 +755,9 @@ const styles = StyleSheet.create({
   bgBlobPrimary: { position: "absolute", top: -100, right: -150, width: 450, height: 450, borderRadius: 225, backgroundColor: "#E2F2E9", opacity: 0.8 },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
   backBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#FFFFFF", justifyContent: "center", alignItems: "center", elevation: 4, shadowColor: "#0A8754", shadowOpacity: 0.1, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10 },
-  headerTextWrapper: { marginLeft: 16, flex: 1 },
+  headerTextWrapper: { marginLeft: 12, flex: 1 },
+  headerLogoContainer: { width: 44, height: 44, borderRadius: 12, overflow: "hidden", marginLeft: 12, backgroundColor: "#FFFFFF", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "rgba(10, 135, 84, 0.1)" },
+  headerLogoImage: { width: 32, height: 32 },
   headerTitle: { fontSize: 24, fontWeight: "900", color: "#0F172A", letterSpacing: -0.5 },
   headerSubtitle: { fontSize: 14, color: "#64748B", fontWeight: "600", marginTop: 2 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 60 },

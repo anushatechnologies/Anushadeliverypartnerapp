@@ -255,9 +255,9 @@ export default function Profile() {
           <View style={styles.menuGroupCard}>
              <MenuAction icon="help-circle-outline" label={t('help')} onPress={() => setShowHelp(true)} />
              <View style={styles.menuDividerLine} />
-             <MenuAction icon="file-document-outline" label="Terms & Conditions" onPress={() => {}} />
+             <MenuAction icon="file-document-outline" label="Terms & Conditions" onPress={() => router.push('/terms')} />
              <View style={styles.menuDividerLine} />
-             <MenuAction icon="information-outline" label="About Anusha Bazaar" onPress={() => {}} />
+             <MenuAction icon="information-outline" label="About Anusha Bazaar" onPress={() => router.push('/about')} />
           </View>
 
           {/* Logout Section */}
@@ -459,7 +459,9 @@ function EditPersonalModal({ visible, onClose, initialName, phone, onSuccess }: 
         onSuccess("Personal details successfully updated.");
       }, 400);
     } catch (e: any) {
-      Alert.alert("Update Failed", "Could not push identity updates to server.");
+      const status = e?.response?.status;
+      const errorMessage = e?.response?.data?.message || e?.response?.data?.error || e?.message || "Unknown Error";
+      Alert.alert("Update Failed", `Could not push identity updates to server.\n\nStatus: ${status || 'No Status'}\nError: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -523,7 +525,9 @@ function EditVehicleModal({ visible, onClose, initialType, initialModel, initial
         onSuccess("Vehicle information updated successfully.");
       }, 400);
     } catch (e: any) {
-      Alert.alert("Update Failed", "Could not save your vehicle details right now.");
+      const status = e?.response?.status;
+      const errorMessage = e?.response?.data?.message || e?.response?.data?.error || e?.message || "Unknown Error";
+      Alert.alert("Update Failed", `Could not save your vehicle details right now.\n\nStatus: ${status || 'No Status'}\nError: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

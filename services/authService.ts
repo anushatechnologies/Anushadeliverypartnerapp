@@ -6,11 +6,15 @@ export const authService = {
     return res.data;
   },
   signup: async (data: { firebaseIdToken: string, firstName: string, lastName: string, vehicleType: string, vehicleModel: string, registrationNumber: string, profilePhotoUrl: string, fcmToken?: string }) => {
-    const res = await apiClient.post('/api/delivery/auth/signup', data);
+    const payload = { ...data };
+    if (!payload.fcmToken) delete payload.fcmToken;
+    const res = await apiClient.post('/api/delivery/auth/signup', payload);
     return res.data;
   },
   login: async (firebaseIdToken: string, fcmToken?: string) => {
-    const res = await apiClient.post('/api/delivery/auth/login', { firebaseIdToken, fcmToken });
+    const payload: any = { firebaseIdToken };
+    if (fcmToken) payload.fcmToken = fcmToken;
+    const res = await apiClient.post('/api/delivery/auth/login', payload);
     return res.data;
   },
   saveFcmToken: async (phone: string, fcmToken: string) => {

@@ -13,8 +13,10 @@ import {
   ImageBackground,
   RefreshControl,
   TextInput,
-  Linking
+  Linking,
+  Vibration
 } from "react-native";
+import { Audio } from 'expo-av';
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -101,6 +103,33 @@ export default function Home() {
     }
   };
 
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  const playAlarm = async () => {
+    try {
+      if (soundRef.current) await stopAlarm();
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' },
+        { shouldPlay: true, isLooping: true, volume: 1.0 }
+      );
+      soundRef.current = sound;
+      Vibration.vibrate([0, 500, 200, 500], true);
+    } catch (e) {
+      console.warn("Sound system failed", e);
+    }
+  };
+
+  const stopAlarm = async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+      Vibration.cancel();
+    } catch (e) { }
+  };
+
   useEffect(() => {
     fetchDashboard();
     
@@ -108,11 +137,28 @@ export default function Home() {
     const interval = setInterval(async () => {
        if (active && user?.id) {
           try {
-             // 1. POLLING FOR NEW ASSIGNED ORDER (Optional, if no WebSocket)
+             // 1. POLLING FOR NEW ASSIGNED ORDER
              const activeOrders = await orderService.getActiveOrders(user.id);
              
-             // 2. BACKGROUND GPS SYNC (Update location for first active order)
+             // Check if we have orders that are in "ASSIGNED" status (not accepted yet)
+             // This depends on the backend payload structure
              if (activeOrders && activeOrders.length > 0) {
+                const newPotential = activeOrders.find((o: any) => o.status === 'ASSIGNED' || !o.acceptedAt);
+                if (newPotential && !incomingOrder) {
+                   setIncomingOrder({
+                      id: newPotential.id.toString(),
+                      vendor: newPotential.vendorName || "Unknown Vendor",
+                      location: newPotential.customerAddress || "Customer Location",
+                      distance: newPotential.distanceText || "2.4 km",
+                      earnings: `₹${newPotential.estimateEarnings || '45'}`,
+                      orderNumber: newPotential.orderNumber
+                   });
+                   playAlarm();
+                }
+             }
+
+             // 2. BACKGROUND GPS SYNC
+             if (activeOrders && activeOrders.sort((a: any, b: any) => b.id - a.id)[0]) {
                 const firstOrder = activeOrders[0];
                 const locStatus = await Location.requestForegroundPermissionsAsync();
                 if (locStatus.status === 'granted') {
@@ -125,13 +171,16 @@ export default function Home() {
                 }
              }
           } catch(e) {
-             console.log("Background telemetry sync deferred");
+             console.log("Telemetry pulse deferred");
           }
        }
-    }, 60000); // Pulse every 60 seconds
+    }, 15000); // Pulse every 15 seconds for more responsive assignment
 
-    return () => clearInterval(interval);
-  }, [active, user?.id]);
+    return () => {
+        clearInterval(interval);
+        stopAlarm();
+    };
+  }, [active, user?.id, incomingOrder]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -142,6 +191,7 @@ export default function Home() {
   const handleAcceptOrder = async () => {
     if (!incomingOrder) return;
     setLoading(true);
+    await stopAlarm();
     try {
        await orderService.acceptOrder(incomingOrder.orderNumber || incomingOrder.id);
        Alert.alert("Order Accepted!", "The order has been moved to your Active Tasks.");
@@ -164,6 +214,7 @@ export default function Home() {
     
     if (!incomingOrder) return;
     setLoading(true);
+    await stopAlarm();
 
     try {
       await orderService.rejectOrder(incomingOrder.orderNumber || incomingOrder.id);
@@ -197,12 +248,16 @@ export default function Home() {
       setActive(!newState); // Revert on failure
       
       const status = e?.response?.status;
+      const errorMessage = e?.response?.data?.message || e?.response?.data?.error || e?.message || "Unknown Error";
+      const errUrl = e?.config?.baseURL + "" + e?.config?.url;
+      Alert.alert("Server Info", `Status: ${status || 'No Status'}\nURL: ${e?.config?.url}\nError: ${errorMessage}`);
+      
       if (status === 403) {
         setPopup({
           visible: true,
           type: "error",
           title: "Account Locked",
-          message: e?.response?.data?.error || "Check documents. Verification Pending."
+          message: errorMessage
         });
       } else {
         setPopup({
@@ -300,7 +355,6 @@ export default function Home() {
               onPress={() => router.push("/notifications")}
             >
               <MaterialCommunityIcons name="bell-ring-outline" size={22} color="#0F172A" />
-              {rejectedOrders.length > 0 && <View style={styles.notifBadge} />}
             </TouchableOpacity>
           </View>
         </View>
@@ -314,67 +368,85 @@ export default function Home() {
           }
         >
 
-          {/* Incoming Order Card */}
-          {incomingOrder && (
-            <Animated.View entering={FadeInDown} style={styles.incomingOrderCard}>
-              <View style={styles.incomingOrderHeader}>
-                <View style={styles.incomingBadge}>
-                  <View style={[styles.pulseDot, { backgroundColor: '#fff' }]} />
-                  <Text style={styles.incomingBadgeText}>New Assigned Order</Text>
-                </View>
-                <Text style={styles.incomingOrderId}>{incomingOrder.id}</Text>
-              </View>
-
-              <View style={styles.incomingOrderDetails}>
-                <View style={styles.incomingRow}>
-                  <View style={styles.incomingIconWrap}>
-                    <MaterialCommunityIcons name="storefront" size={20} color="#6366F1" />
+          {/* Premium Incoming Order Modal */}
+          <Modal visible={!!incomingOrder} transparent animationType="slide">
+            <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.85)' }]}>
+              <Animated.View entering={FadeInUp.springify()} style={styles.assignmentModal}>
+                <LinearGradient
+                  colors={['#7C3AED', '#4F46E5']}
+                  style={styles.assignmentHeader}
+                >
+                  <View style={styles.assignmentBadge}>
+                    <MaterialCommunityIcons name="lightning-bolt" size={16} color="#F59E0B" />
+                    <Text style={styles.assignmentBadgeText}>NEW CHALLENGE</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.incomingLabel}>Pickup From</Text>
-                    <Text style={styles.incomingValue} numberOfLines={1}>{incomingOrder.vendor}</Text>
-                  </View>
+                  <Text style={styles.assignmentPrice}>{incomingOrder?.earnings}</Text>
+                  <Text style={styles.assignmentPriceSub}>Estimated Earning</Text>
+                </LinearGradient>
+
+                <View style={styles.assignmentBody}>
+                   <View style={styles.stepItem}>
+                      <View style={[styles.stepIcon, { backgroundColor: '#F5F3FF' }]}>
+                         <MaterialCommunityIcons name="storefront" size={24} color="#7C3AED" />
+                      </View>
+                      <View style={styles.stepText}>
+                         <Text style={styles.stepLabel}>PICKUP AT</Text>
+                         <Text style={styles.stepValue}>{incomingOrder?.vendor}</Text>
+                      </View>
+                   </View>
+
+                   <View style={styles.stepDashed} />
+
+                   <View style={styles.stepItem}>
+                      <View style={[styles.stepIcon, { backgroundColor: '#ECFDF5' }]}>
+                         <MaterialCommunityIcons name="map-marker-radius" size={24} color="#10B981" />
+                      </View>
+                      <View style={styles.stepText}>
+                         <Text style={styles.stepLabel}>DELIVER TO</Text>
+                         <Text style={styles.stepValue}>{incomingOrder?.location}</Text>
+                      </View>
+                   </View>
+
+                   <View style={styles.assignmentStats}>
+                      <View style={styles.assignStatBox}>
+                         <MaterialCommunityIcons name="map-marker-distance" size={18} color="#64748B" />
+                         <Text style={styles.assignStatText}>{incomingOrder?.distance}</Text>
+                      </View>
+                      <View style={styles.assignStatDivider} />
+                      <View style={styles.assignStatBox}>
+                         <MaterialCommunityIcons name="timer-outline" size={18} color="#64748B" />
+                         <Text style={styles.assignStatText}>12 mins</Text>
+                      </View>
+                   </View>
                 </View>
 
-                <View style={styles.routeConnector}>
-                  <View style={styles.routeDot} />
-                  <View style={styles.routeLine} />
-                  <View style={styles.routeDot} />
+                <View style={styles.assignmentActions}>
+                   <TouchableOpacity 
+                      onPress={() => setShowRejectModal(true)} 
+                      style={styles.assignRejectBtn}
+                   >
+                      <Text style={styles.assignRejectText}>REJECT</Text>
+                   </TouchableOpacity>
+                   <TouchableOpacity 
+                      onPress={handleAcceptOrder} 
+                      style={styles.assignAcceptBtn}
+                   >
+                      <LinearGradient
+                        colors={['#10B981', '#059669']}
+                        style={StyleSheet.absoluteFillObject}
+                      />
+                      <Text style={styles.assignAcceptText}>ACCEPT & START</Text>
+                      <MaterialCommunityIcons name="chevron-right" size={20} color="#fff" />
+                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.incomingRow}>
-                  <View style={[styles.incomingIconWrap, { backgroundColor: '#F0FDF4' }]}>
-                    <MaterialCommunityIcons name="map-marker" size={20} color="#10B981" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.incomingLabel}>Drop At</Text>
-                    <Text style={styles.incomingValue} numberOfLines={1}>{incomingOrder.location}</Text>
-                  </View>
+                {/* Progress countdown bar mockup */}
+                <View style={styles.countdownContainer}>
+                   <View style={styles.countdownBar} />
                 </View>
-              </View>
-
-              <View style={styles.incomingHighlights}>
-                <View style={styles.highlightBox}>
-                  <MaterialCommunityIcons name="currency-inr" size={16} color="#F59E0B" />
-                  <Text style={styles.highlightText}>{incomingOrder.earnings} Est.</Text>
-                </View>
-                <View style={styles.highlightBox}>
-                  <MaterialCommunityIcons name="map-marker-distance" size={16} color="#38BDF8" />
-                  <Text style={styles.highlightText}>{incomingOrder.distance}</Text>
-                </View>
-              </View>
-
-              <View style={styles.incomingActions}>
-                <TouchableOpacity onPress={() => setShowRejectModal(true)} style={styles.rejectBtn}>
-                  <Text style={styles.rejectBtnText}>Reject</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleAcceptOrder} style={styles.acceptBtn}>
-                  <LinearGradient colors={['#10B981', '#059669']} style={StyleSheet.absoluteFillObject} />
-                  <Text style={styles.acceptBtnText}>Accept Order</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          )}
+              </Animated.View>
+            </View>
+          </Modal>
 
           {/* Carousel */}
           <View style={styles.carouselContainer}>
@@ -457,30 +529,6 @@ export default function Home() {
             <QuickAction icon="account-multiple-plus-outline" label="Refer & Earn" color="#F59E0B" bg="#FFFBEB" onPress={() => router.push("/refer")} />
           </View>
 
-          {/* Recent Rejections Section (Matching Admin History) */}
-          {rejectedOrders.length > 0 && (
-            <Animated.View entering={FadeInUp.delay(300)}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Admin History Rejections</Text>
-              </View>
-              <View style={styles.rejectionsCard}>
-                {rejectedOrders.map((ro, i) => (
-                  <View key={`${ro.id}-${i}`} style={[styles.rejectionItem, i !== 0 && styles.rejectionItemBorder]}>
-                    <View style={styles.rejectionItemLeft}>
-                      <View style={styles.rejectionIconBox}>
-                        <MaterialCommunityIcons name="close-circle-outline" size={20} color="#EF4444" />
-                      </View>
-                      <View>
-                        <Text style={styles.rejectionOrderId}>{ro.id}</Text>
-                        <Text style={styles.rejectionReasonText} numberOfLines={1}>{ro.reason}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.rejectionTime}>{ro.time}</Text>
-                  </View>
-                ))}
-              </View>
-            </Animated.View>
-          )}
 
         </ScrollView>
       </SafeAreaView>
@@ -657,7 +705,7 @@ const styles = StyleSheet.create({
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100, paddingTop: 20, backgroundColor: '#F8FAFC' },
   carouselContainer: { marginBottom: 24, width: '100%' },
-  autoBannerCard: { width: width - 36, height: 140, marginRight: 12, borderRadius: 24, overflow: 'hidden' },
+  autoBannerCard: { width: width - 36, height: (width - 36) / 2, marginRight: 12, borderRadius: 24, overflow: 'hidden' },
   bannerGradient: { flex: 1, borderRadius: 24 },
   bannerContent: { flex: 1, padding: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bannerTextContainer: { flex: 1, marginRight: 15 },
@@ -751,5 +799,31 @@ const styles = StyleSheet.create({
   rejectionIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
   rejectionOrderId: { fontSize: 13, fontWeight: '800', color: '#0F172A', marginBottom: 2 },
   rejectionReasonText: { fontSize: 12, color: '#64748B', fontWeight: '500' },
-  rejectionTime: { fontSize: 11, color: '#94A3B8', fontWeight: '700' }
+  rejectionTime: { fontSize: 11, color: '#94A3B8', fontWeight: '700' },
+
+  // Premium Assignment Modal Styles
+  assignmentModal: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 40, borderTopRightRadius: 40, width: '100%', overflow: 'hidden' },
+  assignmentHeader: { padding: 40, alignItems: 'center' },
+  assignmentBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginBottom: 16 },
+  assignmentBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  assignmentPrice: { fontSize: 48, fontWeight: '900', color: '#FFFFFF', letterSpacing: -1 },
+  assignmentPriceSub: { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '700', marginTop: 4 },
+  assignmentBody: { padding: 32 },
+  stepItem: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  stepIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  stepText: { flex: 1 },
+  stepLabel: { fontSize: 11, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, marginBottom: 4 },
+  stepValue: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
+  stepDashed: { height: 30, width: 2, borderLeftWidth: 2, borderLeftColor: '#E2E8F0', borderStyle: 'dashed', marginLeft: 25, marginVertical: 4 },
+  assignmentStats: { flexDirection: 'row', alignItems: 'center', marginTop: 32, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+  assignStatBox: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  assignStatText: { fontSize: 14, fontWeight: '800', color: '#475569' },
+  assignStatDivider: { width: 1, height: 24, backgroundColor: '#F1F5F9' },
+  assignmentActions: { flexDirection: 'row', padding: 24, paddingTop: 0, gap: 12 },
+  assignRejectBtn: { flex: 1, height: 64, borderRadius: 20, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  assignRejectText: { color: '#94A3B8', fontSize: 14, fontWeight: '900' },
+  assignAcceptBtn: { flex: 2.2, height: 64, borderRadius: 20, overflow: 'hidden', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  assignAcceptText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
+  countdownContainer: { height: 4, backgroundColor: '#F1F5F9', width: '100%' },
+  countdownBar: { height: '100%', backgroundColor: '#10B981', width: '70%' }
 });
