@@ -1,5 +1,5 @@
 node_modules/
-.expo/
+# .expo/
 dist/
 web-build/
 expo-env.d.ts
@@ -20,6 +20,6 @@ yarn-error.*
 *.tsbuildinfo
 app-example
 /ios
-/android
+# /android
 firebase-adminsdk.json
 .env
