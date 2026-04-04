@@ -62,6 +62,9 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
          if (token && cachedProfileStr) {
             // INSTANT LOGIN VIA CACHE (No network delay, fixes reload bugs)
             const cachedProfile = JSON.parse(cachedProfileStr);
+            // Premium Delay for Splash Experience
+            await new Promise(resolve => setTimeout(resolve, 3100));
+
             setAuthState({
               user: cachedProfile.user,
               verificationStatus: cachedProfile.verificationStatus,
@@ -104,6 +107,9 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             const statusRes = await profileService.getStatus();
             if (statusRes.success && statusRes.deliveryPerson) {
                const p = statusRes.deliveryPerson;
+               // Premium Delay
+               await new Promise(resolve => setTimeout(resolve, 3100));
+
                const newState = {
                  user: {
                    id: p.id,
@@ -133,6 +139,9 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       } catch (e) {
          console.warn("Backend session restore failed or unavailable", e);
       }
+
+      // Add a minimum delay for the premium splash screen experience
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Fully Logged Out State (Fallback)
       setAuthState({

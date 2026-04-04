@@ -3,7 +3,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { UserProvider, useUser } from "../context/UserContext";
 import { LanguageProvider } from "../context/LanguageContext";
 import { useEffect, useRef } from "react";
-import AnimatedSplashScreen from "../components/AnimatedSplashScreen";
+import AppLoader from "../components/apploader";
 
 function NavigationGuard() {
   const { authState } = useUser();
@@ -29,7 +29,7 @@ function NavigationGuard() {
   }, [authState.isLoggedIn, authState.isLoading, segments]);
 
   if (authState.isLoading) {
-    return <AnimatedSplashScreen />;
+    return <AppLoader />;
   }
 
   return <Stack screenOptions={{ headerShown: false }} />;
