@@ -3,7 +3,7 @@ import { apiClient } from './apiClient';
 export const orderService = {
   // ─── List-based order queries ────────────────────────────────────────────────
 
-  /** GET /api/delivery-orders/delivery-person/{id} */
+  /** GET /api/delivery-orders/delivery-person/{id} — All orders for a delivery person */
   getOrders: async (deliveryPersonId: number) => {
     const res = await apiClient.get(`/api/delivery-orders/delivery-person/${deliveryPersonId}`);
     return res.data;
@@ -35,15 +35,46 @@ export const orderService = {
 
   // ─── Single-order lookup ─────────────────────────────────────────────────────
 
-  /** GET /api/delivery-orders/{id} */
+  /** GET /api/delivery-orders/{id} — By numeric ID */
   getOrderById: async (id: number) => {
     const res = await apiClient.get(`/api/delivery-orders/${id}`);
     return res.data;
   },
 
-  /** GET /api/delivery-orders/number/{orderNumber} */
+  /** GET /api/delivery-orders/number/{orderNumber} — By order number string */
   getOrderByNumber: async (orderNumber: string) => {
     const res = await apiClient.get(`/api/delivery-orders/number/${encodeURIComponent(orderNumber)}`);
+    return res.data;
+  },
+
+  // ─── Accept / Reject ─────────────────────────────────────────────────────────
+
+  /** POST /api/delivery-orders/{orderNumber}/accept */
+  acceptOrder: async (orderNumber: string, deliveryPersonId: number) => {
+    const res = await apiClient.post(
+      `/api/delivery-orders/${encodeURIComponent(orderNumber)}/accept`,
+      { deliveryPersonId }
+    );
+    return res.data;
+  },
+
+  /** POST /api/delivery-orders/{orderNumber}/reject */
+  rejectOrder: async (orderNumber: string, deliveryPersonId: number, reason: string) => {
+    const res = await apiClient.post(
+      `/api/delivery-orders/${encodeURIComponent(orderNumber)}/reject`,
+      { deliveryPersonId, reason }
+    );
+    return res.data;
+  },
+
+  // ─── Live GPS Location ───────────────────────────────────────────────────────
+
+  /** POST /api/delivery-orders/{orderNumber}/update-location — Triggered every 5 secs */
+  updateLocation: async (orderNumber: string, deliveryPersonId: number, lat: number, lng: number) => {
+    const res = await apiClient.post(
+      `/api/delivery-orders/${encodeURIComponent(orderNumber)}/update-location`,
+      { deliveryPersonId, lat, lng }
+    );
     return res.data;
   },
 
@@ -73,23 +104,7 @@ export const orderService = {
     return res.data;
   },
 
-  /** POST /api/delivery-orders/{orderNumber}/accept */
-  acceptOrder: async (orderNumber: string) => {
-    const res = await apiClient.post(`/api/delivery-orders/${encodeURIComponent(orderNumber)}/accept`);
-    return res.data;
-  },
-
-  /** POST /api/delivery-orders/{orderNumber}/reject */
-  rejectOrder: async (orderNumber: string) => {
-    const res = await apiClient.post(`/api/delivery-orders/${encodeURIComponent(orderNumber)}/reject`);
-    return res.data;
-  },
-
-  /** POST /api/delivery-orders/{orderNumber}/update-location */
-  updateLocation: async (orderNumber: string, latitude: number, longitude: number) => {
-    const res = await apiClient.post(`/api/delivery-orders/${encodeURIComponent(orderNumber)}/update-location`, { latitude, longitude });
-    return res.data;
-  },
+  // ─── Cancel / Report ─────────────────────────────────────────────────────────
 
   /** POST /api/delivery-orders/{orderId}/cancel */
   cancelOrder: async (orderId: number, reason: string) => {

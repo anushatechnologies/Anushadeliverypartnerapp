@@ -85,7 +85,8 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                           name: `${p.firstName} ${p.lastName}`, 
                           vehicleType: p.vehicleType,
                           vehicleModel: p.vehicleModel,
-                          registrationNumber: p.registrationNumber
+                          registrationNumber: p.registrationNumber,
+                          photo: p.profilePhotoUrl || prev.user?.photo
                        },
                        verificationStatus: p.approvalStatus?.toLowerCase() || prev.verificationStatus
                      };
@@ -118,7 +119,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                    vehicleType: p.vehicleType,
                    vehicleModel: p.vehicleModel || "",
                    registrationNumber: p.registrationNumber || "",
-                   photo: null,
+                   photo: p.profilePhotoUrl || null,
                  },
                  verificationStatus: p.approvalStatus?.toLowerCase() || null,
                  isLoggedIn: true,

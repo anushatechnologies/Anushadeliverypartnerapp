@@ -438,7 +438,8 @@ function EditPersonalModal({ visible, onClose, initialName, phone, onSuccess }: 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [saving, setSaving] = useState(false);
-  const { updateProfile } = useUser();
+  const { authState, updateProfile } = useUser();
+  const user = authState.user;
 
   React.useEffect(() => {
     if (initialName) {
@@ -452,7 +453,11 @@ function EditPersonalModal({ visible, onClose, initialName, phone, onSuccess }: 
     if (!firstName || !lastName) return Alert.alert("Incomplete", "First and Last Name are required.");
     setSaving(true);
     try {
-      await profileService.updateProfileDetails({ firstName, lastName });
+      if (user?.id) {
+        await profileService.updateProfileDetailsById(user.id, { firstName, lastName });
+      } else {
+        await profileService.updateProfileDetails({ firstName, lastName });
+      }
       await updateProfile({ name: `${firstName} ${lastName}` });
       onClose();
       setTimeout(() => {
@@ -508,17 +513,26 @@ function EditVehicleModal({ visible, onClose, initialType, initialModel, initial
   const [model, setModel] = useState(initialModel || "");
   const [regNo, setRegNo] = useState(initialRegNo || "");
   const [loading, setLoading] = useState(false);
-  const { updateProfile } = useUser();
+  const { authState, updateProfile } = useUser();
+  const user = authState.user;
 
   const handleSave = async () => {
     if (!model || !regNo) return Alert.alert("Incomplete", "Please provide the vehicle model and registration number.");
     setLoading(true);
     try {
-      await profileService.updateVehicle({
-        vehicleType: vehicle.toUpperCase(),
-        vehicleModel: model,
-        registrationNumber: regNo
-      });
+      if (user?.id) {
+        await profileService.updateVehicleById(user.id, {
+          vehicleType: vehicle.toUpperCase(),
+          vehicleModel: model,
+          registrationNumber: regNo
+        });
+      } else {
+        await profileService.updateVehicle({
+          vehicleType: vehicle.toUpperCase(),
+          vehicleModel: model,
+          registrationNumber: regNo
+        });
+      }
       await updateProfile({ vehicleType: vehicle });
       onClose();
       setTimeout(() => {

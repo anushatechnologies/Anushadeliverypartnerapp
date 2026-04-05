@@ -165,6 +165,7 @@ export default function Home() {
                    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
                    await orderService.updateLocation(
                       firstOrder.orderNumber || firstOrder.id.toString(),
+                      user.id,
                       loc.coords.latitude,
                       loc.coords.longitude
                    );
@@ -193,7 +194,7 @@ export default function Home() {
     setLoading(true);
     await stopAlarm();
     try {
-       await orderService.acceptOrder(incomingOrder.orderNumber || incomingOrder.id);
+       await orderService.acceptOrder(incomingOrder.orderNumber || incomingOrder.id, user!.id!);
        Alert.alert("Order Accepted!", "The order has been moved to your Active Tasks.");
        setIncomingOrder(null);
        fetchDashboard(); // Refresh stats
@@ -217,7 +218,7 @@ export default function Home() {
     await stopAlarm();
 
     try {
-      await orderService.rejectOrder(incomingOrder.orderNumber || incomingOrder.id);
+      await orderService.rejectOrder(incomingOrder.orderNumber || incomingOrder.id, user!.id!, finalReason);
       
       // Add to history
       setRejectedOrders(prev => [{
@@ -243,7 +244,11 @@ export default function Home() {
     setActive(newState); // Optimistic UI update
     
     try {
-      await profileService.updateOnlineStatus(newState);
+      if (user?.id) {
+        await profileService.updateOnlineStatusById(user.id, newState);
+      } else {
+        await profileService.updateOnlineStatus(newState);
+      }
     } catch (e: any) {
       setActive(!newState); // Revert on failure
       

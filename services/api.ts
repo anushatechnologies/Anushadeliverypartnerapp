@@ -7,39 +7,34 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// ─── RIDER REGISTRATION ─────
+// ─── LEGACY HELPERS ─────
+// These are convenience wrappers. For full API access, use the dedicated service files:
+//   - authService.ts      → /api/delivery/auth/*
+//   - profileService.ts   → /api/delivery-app/* and /api/delivery-person/*
+//   - orderService.ts     → /api/delivery-orders/*
+//   - documentService.ts  → /api/documents/*
+//   - payoutService.ts    → /api/delivery-app/payouts
 
-export const registerRider = async (data: {
-  name: string; phone: string; vehicleType: string;
-  aadhaar: string; pan: string; license: string;
-  profilePhoto: string; aadhaarPhoto: string; panPhoto: string; licensePhoto: string;
-}) => {
-  const formData = new FormData();
-  Object.entries(data).forEach(([key, value]) => {
-    if (key.includes('Photo') && value) {
-      const filename = value.split('/').pop() || 'photo.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image`;
-      formData.append(key, { uri: value, name: filename, type } as any);
-    } else {
-      formData.append(key, value as string);
-    }
-  });
-
+/**
+ * Check if a phone number is already registered.
+ * Uses the auth check-phone endpoint.
+ */
+export const checkPhoneExists = async (phone: string) => {
   try {
-    const response = await api.post('/riders/register', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const response = await api.get(`/api/delivery/auth/check-phone/${encodeURIComponent(phone)}`);
     return response.data;
   } catch (error) {
-    console.warn("⚠️ [DEBUG] Backend registration failed (Network Error). Simulating success for development.");
-    return { success: true, message: "Mock registration successful" };
+    return { exists: false };
   }
 };
 
+/**
+ * Get delivery person status by phone number.
+ * Uses the delivery-app phone lookup endpoint.
+ */
 export const getRiderStatus = async (phone: string) => {
   try {
-    const response = await api.get(`/riders/status/${phone}`);
+    const response = await api.get(`/api/delivery-app/phone/${encodeURIComponent(phone)}`);
     return response.data;
   } catch (error) {
     return { status: "not_found" };

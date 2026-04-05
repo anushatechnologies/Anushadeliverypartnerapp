@@ -49,34 +49,49 @@ export default function KYC() {
   const fetchBackendStatus = async () => {
     try {
       const res = await profileService.getStatus();
-      if (res.success) {
-        if (res.deliveryPerson) setDpId(res.deliveryPerson.id);
-        if (res.documents) {
-          const sMap: Record<string, string> = {};
-          const uMap: Record<string, string> = {};
-          const nMap: Record<string, string> = {};
-          res.documents.forEach((d: any) => {
-            sMap[d.documentType] = d.status;
-            uMap[d.documentType] = d.documentUrl;
-            nMap[d.documentType] = d.documentNumber;
-          });
-          setDocStatuses(sMap);
-          setDocNumbers(nMap);
-          if (uMap['PAN_CARD']) setPan(uMap['PAN_CARD']);
-          if (uMap['AADHAAR_CARD']) setAadhaar(uMap['AADHAAR_CARD']);
-          if (uMap['DRIVING_LICENSE']) setDl(uMap['DRIVING_LICENSE']);
-          
-          if (nMap['PAN_CARD']) setPanNumber(nMap['PAN_CARD']);
-          if (nMap['AADHAAR_CARD']) setAadhaarNumber(nMap['AADHAAR_CARD']);
-          if (nMap['DRIVING_LICENSE']) setDlNumber(nMap['DRIVING_LICENSE']);
+      let deliveryPersonId = dpId;
+      
+      if (res.success && res.deliveryPerson) {
+        deliveryPersonId = res.deliveryPerson.id;
+        setDpId(deliveryPersonId);
+      }
+
+      if (deliveryPersonId) {
+        try {
+          const docs = await profileService.getDocumentsById(deliveryPersonId);
+          if (docs && Array.isArray(docs)) {
+            const sMap: Record<string, string> = {};
+            const uMap: Record<string, string> = {};
+            const nMap: Record<string, string> = {};
+            
+            docs.forEach((d: any) => {
+              sMap[d.documentType] = d.status;
+              uMap[d.documentType] = d.documentUrl || d.url || "";
+              nMap[d.documentType] = d.documentNumber;
+            });
+            
+            setDocStatuses(sMap);
+            setDocNumbers(nMap);
+            
+            if (uMap['PAN_CARD']) setPan(uMap['PAN_CARD']);
+            if (uMap['AADHAAR_CARD']) setAadhaar(uMap['AADHAAR_CARD']);
+            if (uMap['DRIVING_LICENSE']) setDl(uMap['DRIVING_LICENSE']);
+            
+            if (nMap['PAN_CARD']) setPanNumber(nMap['PAN_CARD']);
+            if (nMap['AADHAAR_CARD']) setAadhaarNumber(nMap['AADHAAR_CARD']);
+            if (nMap['DRIVING_LICENSE']) setDlNumber(nMap['DRIVING_LICENSE']);
+          }
+        } catch (docErr) {
+          console.warn("Failed fetching explicit docs", docErr);
         }
       }
     } catch(e) {
-      console.warn("Failed to load documents", e);
+      console.warn("Failed to load backend status", e);
     } finally {
       setLoadingDocs(false);
     }
   };
+
 
   const [pickerModal, setPickerModal] = useState<{visible: boolean, docType: string, title: string, setter: ((uri: string) => void) | null}>({
     visible: false, docType: "", title: "", setter: null
@@ -286,6 +301,9 @@ function DocCard({ title, subtitle, image, status, onUpload, delay, docNo, setDo
   const isRejected = status === 'REJECTED';
   const isPending = status === 'PENDING';
   const isNew = status === 'NEW_SELECTION';
+  
+  // Lock edit capability once pending or approved to prevent duplicate submissions
+  const isLocked = isApproved || isPending;
 
   return (
     <Animated.View entering={FadeInDown.delay(delay)} style={[styles.docCard, isRejected && { borderColor: '#FEE2E2', borderWidth: 2 }]}>
@@ -326,7 +344,7 @@ function DocCard({ title, subtitle, image, status, onUpload, delay, docNo, setDo
           )}
        </View>
 
-       <Pressable onPress={isApproved ? undefined : onUpload} style={[styles.uploadArea, image && styles.uploadAreaDone, isApproved && { opacity: 0.8 }]}>
+       <Pressable onPress={isLocked ? undefined : onUpload} style={[styles.uploadArea, image && styles.uploadAreaDone, isLocked && { opacity: 0.8 }]}>
           {image ? (
             <>
               <Image source={{ uri: image }} style={styles.previewImage} />
@@ -347,7 +365,7 @@ function DocCard({ title, subtitle, image, status, onUpload, delay, docNo, setDo
           )}
        </Pressable>
 
-        {(!isApproved && setDocNo !== undefined) && (
+        {(!isLocked && setDocNo !== undefined) && (
            <View style={styles.numberInputContainer}>
               <Text style={styles.numberInputLabel}>{title} Number</Text>
               <View style={styles.numberInputWrap}>

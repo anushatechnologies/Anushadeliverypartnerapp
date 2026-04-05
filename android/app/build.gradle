@@ -28,8 +28,8 @@ android {
         applicationId 'com.Anushadeliverypartnerapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 78
-        versionName "2.4.4"
+        versionCode 80
+        versionName "2.4.6"
     }
 
     // 🔐 FINAL FIX (DIRECT SIGNING)
