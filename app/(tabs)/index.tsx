@@ -339,14 +339,17 @@ export default function Home() {
           </View>
 
           <View style={styles.headerRight}>
-            <CustomTouchableOpacity
-              activeOpacity={0.9}
+            <TouchableOpacity
+              activeOpacity={0.85}
               onPress={toggleOnline}
-              style={[styles.statusPill, active ? styles.statusPillOnline : styles.statusPillOffline]}
+              style={[styles.powerBtn, active ? styles.powerBtnOnline : styles.powerBtnOffline]}
             >
-              <View style={[styles.statusDot, { backgroundColor: active ? '#fff' : '#94A3B8' }]} />
-              <Text style={[styles.statusPillText, { color: active ? '#fff' : '#64748B' }]}>{active ? 'ONLINE' : 'OFFLINE'}</Text>
-            </CustomTouchableOpacity>
+              <MaterialCommunityIcons
+                name="power"
+                size={22}
+                color={active ? '#fff' : '#94A3B8'}
+              />
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.headerIconBtn}
@@ -701,11 +704,9 @@ const styles = StyleSheet.create({
   headerGreeting: { fontSize: 12, color: '#64748B', fontWeight: '600', marginTop: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerIconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
-  statusPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, gap: 5 },
-  statusPillOnline: { backgroundColor: '#22C55E' },
-  statusPillOffline: { backgroundColor: '#F1F5F9' },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusPillText: { fontSize: 11, fontWeight: '800' },
+  powerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 4 },
+  powerBtnOnline: { backgroundColor: '#22C55E', shadowColor: '#22C55E' },
+  powerBtnOffline: { backgroundColor: '#F1F5F9', shadowColor: '#94A3B8' },
   notifBadge: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: '#FFFFFF' },
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100, paddingTop: 20, backgroundColor: '#F8FAFC' },
