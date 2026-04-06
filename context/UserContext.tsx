@@ -52,107 +52,118 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     isLoading: true,
   });
 
-  // Session Rehydration Listener
+  // Session Rehydration — token persists until explicit logout or app uninstall
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-         const token = await AsyncStorage.getItem('@anusha_jwt_token');
-         const cachedProfileStr = await AsyncStorage.getItem(STORAGE_KEYS.PROFILE_STATE);
-         
-         if (token && cachedProfileStr) {
-            // INSTANT LOGIN VIA CACHE (No network delay, fixes reload bugs)
-            const cachedProfile = JSON.parse(cachedProfileStr);
-            // Premium Delay for Splash Experience
-            await new Promise(resolve => setTimeout(resolve, 3100));
+        const token = await AsyncStorage.getItem('@anusha_jwt_token');
+        const cachedProfileStr = await AsyncStorage.getItem(STORAGE_KEYS.PROFILE_STATE);
 
-            setAuthState({
-              user: cachedProfile.user,
-              verificationStatus: cachedProfile.verificationStatus,
-              isLoggedIn: true,
-              isLoading: false,
+        if (token && cachedProfileStr) {
+          // ── FAST PATH: restore from cache immediately ──────────────────────
+          const cachedProfile = JSON.parse(cachedProfileStr);
+          await new Promise(resolve => setTimeout(resolve, 3100));
+
+          setAuthState({
+            user: cachedProfile.user,
+            verificationStatus: cachedProfile.verificationStatus,
+            isLoggedIn: true,
+            isLoading: false,
+          });
+
+          // Background sync — update profile silently, never log out on failure
+          profileService.getStatus()
+            .then(async (statusRes) => {
+              if (statusRes?.success && statusRes.deliveryPerson) {
+                const p = statusRes.deliveryPerson;
+                setAuthState(prev => {
+                  const updated = {
+                    ...prev,
+                    user: {
+                      ...prev.user,
+                      id: p.id,
+                      name: `${p.firstName} ${p.lastName}`,
+                      vehicleType: p.vehicleType,
+                      vehicleModel: p.vehicleModel,
+                      registrationNumber: p.registrationNumber,
+                      photo: p.profilePhotoUrl || prev.user?.photo,
+                    },
+                    verificationStatus: p.approvalStatus?.toLowerCase() || prev.verificationStatus,
+                  };
+                  AsyncStorage.setItem(STORAGE_KEYS.PROFILE_STATE, JSON.stringify({ user: updated.user, verificationStatus: updated.verificationStatus })).catch(() => {});
+                  return updated as any;
+                });
+              }
+            })
+            .catch(async (e) => {
+              // Only logout if the server explicitly rejects the token (401)
+              if (e?.response?.status === 401) {
+                await AsyncStorage.multiRemove(['@anusha_jwt_token', STORAGE_KEYS.PROFILE_STATE]);
+                setAuthState({ user: null, verificationStatus: null, isLoggedIn: false, isLoading: false });
+              }
+              // Any other error (network, timeout) — keep the user logged in
             });
-            
-            // Background sync quietly
-            profileService.getStatus().then(async (statusRes) => {
-               if (statusRes.success && statusRes.deliveryPerson) {
-                  const p = statusRes.deliveryPerson;
-                  setAuthState(prev => {
-                     const updated = {
-                       ...prev,
-                       user: { 
-                          ...prev.user, 
-                          id: p.id, 
-                          name: `${p.firstName} ${p.lastName}`, 
-                          vehicleType: p.vehicleType,
-                          vehicleModel: p.vehicleModel,
-                          registrationNumber: p.registrationNumber,
-                          photo: p.profilePhotoUrl || prev.user?.photo
-                       },
-                       verificationStatus: p.approvalStatus?.toLowerCase() || prev.verificationStatus
-                     };
-                     AsyncStorage.setItem(STORAGE_KEYS.PROFILE_STATE, JSON.stringify({ user: updated.user, verificationStatus: updated.verificationStatus })).catch(()=>{});
-                     return updated as any;
-                  });
-               }
-            }).catch(e => console.warn("Background sync failed", e));
 
-            // SYNC FCM TOKEN WITH ADMIN (Background sync quietly)
-            if (cachedProfile.user?.phone) {
-               messaging().getToken()
-                  .then(tk => { if (tk) return authService.saveFcmToken(cachedProfile.user.phone, tk); })
-                  .catch(() => {});
-            }
-            return; // We have successfully logged them in instantly
-         } else if (token) {
-            // Token exists but cache was cleared, wait for network sync
+          // Sync FCM token silently
+          if (cachedProfile.user?.phone) {
+            messaging().getToken()
+              .then(tk => { if (tk) authService.saveFcmToken(cachedProfile.user.phone, tk); })
+              .catch(() => {});
+          }
+          return;
+        }
+
+        if (token) {
+          // ── Token exists but cache missing — try network restore ───────────
+          try {
             const statusRes = await profileService.getStatus();
-            if (statusRes.success && statusRes.deliveryPerson) {
-               const p = statusRes.deliveryPerson;
-               // Premium Delay
-               await new Promise(resolve => setTimeout(resolve, 3100));
+            if (statusRes?.success && statusRes.deliveryPerson) {
+              const p = statusRes.deliveryPerson;
+              await new Promise(resolve => setTimeout(resolve, 3100));
 
-               const newState = {
-                 user: {
-                   id: p.id,
-                   name: `${p.firstName} ${p.lastName}`,
-                   phone: p.phoneNumber,
-                   vehicleType: p.vehicleType,
-                   vehicleModel: p.vehicleModel || "",
-                   registrationNumber: p.registrationNumber || "",
-                   photo: p.profilePhotoUrl || null,
-                 },
-                 verificationStatus: p.approvalStatus?.toLowerCase() || null,
-                 isLoggedIn: true,
-                 isLoading: false,
-               };
-               setAuthState(newState as any);
-               await AsyncStorage.setItem(STORAGE_KEYS.PROFILE_STATE, JSON.stringify({ user: newState.user, verificationStatus: newState.verificationStatus }));
-               
-               // SYNC FCM TOKEN (Network Refresh Path)
-               if (p.phoneNumber) {
-                  messaging().getToken()
-                    .then(tk => { if (tk) return authService.saveFcmToken(p.phoneNumber, tk); })
-                    .catch(() => {});
-               }
-               return;
+              const newState = {
+                user: {
+                  id: p.id,
+                  name: `${p.firstName} ${p.lastName}`,
+                  phone: p.phoneNumber,
+                  vehicleType: p.vehicleType,
+                  vehicleModel: p.vehicleModel || "",
+                  registrationNumber: p.registrationNumber || "",
+                  photo: p.profilePhotoUrl || null,
+                },
+                verificationStatus: p.approvalStatus?.toLowerCase() || null,
+                isLoggedIn: true,
+                isLoading: false,
+              };
+              setAuthState(newState as any);
+              await AsyncStorage.setItem(STORAGE_KEYS.PROFILE_STATE, JSON.stringify({ user: newState.user, verificationStatus: newState.verificationStatus }));
+
+              if (p.phoneNumber) {
+                messaging().getToken()
+                  .then(tk => { if (tk) authService.saveFcmToken(p.phoneNumber, tk); })
+                  .catch(() => {});
+              }
+              return;
             }
-         }
+          } catch (e: any) {
+            if (e?.response?.status === 401) {
+              // Token explicitly rejected — clear and show login
+              await AsyncStorage.multiRemove(['@anusha_jwt_token', STORAGE_KEYS.PROFILE_STATE]);
+            } else {
+              // Network/server error — keep token, show login UI with message
+              console.warn("Session restore: network unavailable, will retry on next launch");
+            }
+          }
+        }
       } catch (e) {
-         console.warn("Backend session restore failed or unavailable", e);
+        console.warn("Session init error", e);
       }
 
-      // Add a minimum delay for the premium splash screen experience
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Fully Logged Out State (Fallback)
-      setAuthState({
-         user: null,
-         verificationStatus: null,
-         isLoggedIn: false,
-         isLoading: false,
-      });
+      setAuthState({ user: null, verificationStatus: null, isLoggedIn: false, isLoading: false });
     };
-    
+
     initializeAuth();
   }, []);
 

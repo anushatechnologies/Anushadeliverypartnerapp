@@ -15,7 +15,7 @@
       "**/*"
     ],
     "android": {
-      "versionCode": 80,
+      "versionCode": 84,
       "package": "com.Anushadeliverypartnerapp",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon-foreground.png",

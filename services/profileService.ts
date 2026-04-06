@@ -101,12 +101,4 @@ export const profileService = {
     return res.data;
   },
 
-  /** PUT /api/delivery-person/{id}/profile — Update profile mapped to ID */
-  updateProfileDetailsById: async (
-    id: number,
-    data: { firstName: string; lastName: string; profilePhotoUrl?: string }
-  ) => {
-    const res = await apiClient.put(`/api/delivery-person/${id}/profile`, data);
-    return res.data;
-  },
 };
