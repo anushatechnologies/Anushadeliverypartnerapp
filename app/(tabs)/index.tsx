@@ -36,6 +36,12 @@ import * as Location from "expo-location";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import PremiumPopup, { PopupType } from "../../components/PremiumPopup";
+import { locationService } from "../../services/locationService";
+// FCM foreground notifications (Phase 6)
+let messaging: any = null;
+try {
+  messaging = require('@react-native-firebase/messaging').default;
+} catch { /* expo-go or web — skip */ }
 
 const { width } = Dimensions.get("window");
 
@@ -130,56 +136,87 @@ export default function Home() {
     } catch (e) { }
   };
 
+  // ── Phase 6: FCM foreground handler ──────────────────────────────────────
+  useEffect(() => {
+    if (!messaging || !user?.id) return;
+    const unsubscribe = messaging().onMessage(async (remoteMessage: any) => {
+      const data = remoteMessage.data ?? {};
+      const msgType = data.type;
+
+      if (msgType === 'NEW_DELIVERY_ORDER' && active) {
+        // A new order was broadcasted — show the accept/reject popup
+        setIncomingOrder({
+          id: data.orderId ?? '',
+          vendor: data.storeName ?? data.pickup ?? 'Store',
+          location: data.delivery ?? 'Customer Location',
+          distance: data.distanceKm ? `${data.distanceKm} km` : '—',
+          earnings: data.amount ? `₹${data.deliveryFee ?? data.amount}` : '—',
+          orderNumber: data.orderNumber ?? '',
+        });
+        playAlarm();
+      }
+    });
+    return () => unsubscribe();
+  }, [active, user?.id]);
+
   useEffect(() => {
     fetchDashboard();
-    
+
+    // Phase 3: Start GPS background pinging when rider is online
+    if (active && user?.id) {
+      locationService.startTracking(user.id, null);
+    } else {
+      locationService.stopTracking();
+    }
+
     // START POLLING FOR NEW ORDERS & UPDATING LOCATION
     const interval = setInterval(async () => {
        if (active && user?.id) {
           try {
-             // 1. POLLING FOR NEW ASSIGNED ORDER
+             // 1. POLLING FOR NEW ASSIGNED ORDER (fallback when FCM is unavailable)
              const activeOrders = await orderService.getActiveOrders(user.id);
-             
-             // Check if we have orders that are in "ASSIGNED" status (not accepted yet)
-             // This depends on the backend payload structure
+
              if (activeOrders && activeOrders.length > 0) {
-                const newPotential = activeOrders.find((o: any) => o.status === 'ASSIGNED' || !o.acceptedAt);
+                const newPotential = activeOrders.find((o: any) => o.status === 'BROADCASTED_TO_RIDERS' || o.status === 'RIDER_ASSIGNED' && !o.acceptedAt);
                 if (newPotential && !incomingOrder) {
                    setIncomingOrder({
                       id: newPotential.id.toString(),
-                      vendor: newPotential.vendorName || "Unknown Vendor",
-                      location: newPotential.customerAddress || "Customer Location",
-                      distance: newPotential.distanceText || "2.4 km",
-                      earnings: `₹${newPotential.estimateEarnings || '45'}`,
+                      vendor: newPotential.store?.name ?? newPotential.vendorName ?? "Unknown Store",
+                      location: newPotential.deliveryAddress ?? newPotential.customerAddress ?? "Customer Location",
+                      distance: newPotential.distanceKm ? `${Number(newPotential.distanceKm).toFixed(1)} km` : "—",
+                      earnings: `₹${newPotential.deliveryFee ?? newPotential.estimateEarnings ?? '—'}`,
                       orderNumber: newPotential.orderNumber
                    });
                    playAlarm();
                 }
-             }
 
-             // 2. BACKGROUND GPS SYNC
-             if (activeOrders && activeOrders.sort((a: any, b: any) => b.id - a.id)[0]) {
-                const firstOrder = activeOrders[0];
-                const locStatus = await Location.requestForegroundPermissionsAsync();
-                if (locStatus.status === 'granted') {
-                   const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                   await orderService.updateLocation(
-                      firstOrder.orderNumber || firstOrder.id.toString(),
+                // 2. RTDB live location for active orders
+                const activeOrder = activeOrders.find((o: any) =>
+                  o.status === 'RIDER_ASSIGNED' || o.status === 'REACHED_STORE' ||
+                  o.status === 'PICKED_UP' || o.status === 'OUT_FOR_DELIVERY');
+                if (activeOrder) {
+                  const locStatus = await Location.requestForegroundPermissionsAsync();
+                  if (locStatus.status === 'granted') {
+                    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                    await orderService.updateLocation(
+                      activeOrder.orderNumber || activeOrder.id.toString(),
                       user.id,
                       loc.coords.latitude,
                       loc.coords.longitude
-                   );
+                    );
+                  }
                 }
              }
           } catch(e) {
              console.log("Telemetry pulse deferred");
           }
        }
-    }, 15000); // Pulse every 15 seconds for more responsive assignment
+    }, 15000);
 
     return () => {
         clearInterval(interval);
         stopAlarm();
+        locationService.stopTracking();
     };
   }, [active, user?.id, incomingOrder]);
 
@@ -281,7 +318,7 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
 
   const carouselBanners = [
-    { id: '1', title: 'Multi-Vendor Pickups', subtitle: 'Earn 2x on orders from multiple stores', icon: 'storefront-outline' as const, colors: ['#6366F1', '#4F46E5'], iconBg: 'rgba(255,255,255,0.2)' },
+    { id: '1', title: 'Multi-Vendor Pickups', subtitle: 'Earn 2x on orders from multiple stores', icon: 'storefront-outline' as const, colors: ['#14A06D', '#0A6A4C'], iconBg: 'rgba(255,255,255,0.2)' },
     { id: '2', title: 'New Vendors Added!', subtitle: '5 new grocery stores near you', icon: 'basket-check-outline' as const, colors: ['#10B981', '#059669'], iconBg: 'rgba(255,255,255,0.2)' },
     { id: '3', title: 'Refer & Earn', subtitle: 'Get ₹500 for every new partner', icon: 'gift-outline' as const, colors: ['#F59E0B', '#D97706'], iconBg: 'rgba(255,255,255,0.2)' },
     { id: '4', title: 'Peak Hours', subtitle: '3x Surge in your current location', icon: 'lightning-bolt' as const, colors: ['#EF4444', '#DC2626'], iconBg: 'rgba(255,255,255,0.2)' },
@@ -325,7 +362,7 @@ export default function Home() {
         <View style={styles.homeHeader}>
           <View style={styles.headerLeft}>
             <LinearGradient
-              colors={['#7C3AED', '#6366F1']}
+              colors={['#0E8A63', '#14A06D']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.groceryIconBox}
@@ -372,7 +409,7 @@ export default function Home() {
           contentContainerStyle={styles.scrollContent} 
           bounces={true}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7C3AED" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0E8A63" />
           }
         >
 
@@ -381,7 +418,7 @@ export default function Home() {
             <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.85)' }]}>
               <Animated.View entering={FadeInUp.springify()} style={styles.assignmentModal}>
                 <LinearGradient
-                  colors={['#7C3AED', '#4F46E5']}
+                  colors={['#0E8A63', '#0A6A4C']}
                   style={styles.assignmentHeader}
                 >
                   <View style={styles.assignmentBadge}>
@@ -394,8 +431,8 @@ export default function Home() {
 
                 <View style={styles.assignmentBody}>
                    <View style={styles.stepItem}>
-                      <View style={[styles.stepIcon, { backgroundColor: '#F5F3FF' }]}>
-                         <MaterialCommunityIcons name="storefront" size={24} color="#7C3AED" />
+                      <View style={[styles.stepIcon, { backgroundColor: '#F0FDF4' }]}>
+                         <MaterialCommunityIcons name="storefront" size={24} color="#0E8A63" />
                       </View>
                       <View style={styles.stepText}>
                          <Text style={styles.stepLabel}>PICKUP AT</Text>
@@ -531,7 +568,7 @@ export default function Home() {
 
           {/* Quick Actions Removed Placeholders as requested */}
           <View style={styles.quickGrid}>
-            <QuickAction icon="wallet-outline" label="Earnings" color="#7C3AED" bg="#F5F3FF" onPress={() => router.push("/(tabs)/earnings")} />
+            <QuickAction icon="wallet-outline" label="Earnings" color="#0E8A63" bg="#F0FDF4" onPress={() => router.push("/(tabs)/earnings")} />
             <QuickAction icon="clipboard-text-outline" label="Orders" color="#10B981" bg="#ECFDF5" onPress={() => router.push("/(tabs)/orders")} />
             <QuickAction icon="headphones" label="Support" color="#EF4444" bg="#FEF2F2" onPress={() => setShowSupport(true)} />
             <QuickAction icon="account-multiple-plus-outline" label="Refer & Earn" color="#F59E0B" bg="#FFFBEB" onPress={() => router.push("/refer")} />
@@ -560,7 +597,7 @@ export default function Home() {
                 icon="phone-in-talk"
                 label="Call Support"
                 desc="Call: 6309981555"
-                color="#4F46E5"
+                color="#0A6A4C"
                 onPress={() => Linking.openURL('tel:6309981555')}
               />
               <SupportTile
@@ -699,7 +736,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#FFFFFF" },
   homeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  groceryIconBox: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#7C3AED', justifyContent: 'center', alignItems: 'center' },
+  groceryIconBox: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#0E8A63', justifyContent: 'center', alignItems: 'center' },
   brandName: { fontSize: 16, fontWeight: '900', color: '#0F172A', letterSpacing: -0.3 },
   headerGreeting: { fontSize: 12, color: '#64748B', fontWeight: '600', marginTop: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -720,7 +757,7 @@ const styles = StyleSheet.create({
   autoBannerIconCircle: { width: 64, height: 64, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   paginationDots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16, gap: 8 },
   carouselDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E2E8F0' },
-  carouselDotActive: { width: 24, height: 8, borderRadius: 4, backgroundColor: '#7C3AED' },
+  carouselDotActive: { width: 24, height: 8, borderRadius: 4, backgroundColor: '#0E8A63' },
 
   statsRow: { flexDirection: 'row', gap: 14, marginBottom: 24, marginTop: 8 },
   statCardContainer: { flex: 1, borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
@@ -765,14 +802,14 @@ const styles = StyleSheet.create({
   modalSecondaryBtnText: { color: '#475569', fontSize: 16, fontWeight: '800' },
   
   // Incoming Order Styles
-  incomingOrderCard: { width: '100%', marginBottom: 24, backgroundColor: '#FFFFFF', borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 16, borderWidth: 1, borderColor: '#EEF2FF' },
-  incomingOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#6366F1', paddingHorizontal: 16, paddingVertical: 12 },
+  incomingOrderCard: { width: '100%', marginBottom: 24, backgroundColor: '#FFFFFF', borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#14A06D', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 16, borderWidth: 1, borderColor: '#ECFDF5' },
+  incomingOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#14A06D', paddingHorizontal: 16, paddingVertical: 12 },
   incomingBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
   incomingBadgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
   incomingOrderId: { color: '#FFFFFF', fontSize: 13, fontWeight: '700', opacity: 0.9 },
   incomingOrderDetails: { padding: 20, paddingBottom: 10 },
   incomingRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  incomingIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center' },
+  incomingIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center' },
   incomingLabel: { fontSize: 12, color: '#64748B', fontWeight: '600', marginBottom: 2 },
   incomingValue: { fontSize: 15, color: '#0F172A', fontWeight: '800' },
   routeConnector: { marginLeft: 19, height: 28, borderLeftWidth: 2, borderLeftColor: '#E2E8F0', borderStyle: 'dashed', marginVertical: 2 },

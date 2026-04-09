@@ -3,10 +3,45 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 apply plugin: 'com.google.gms.google-services'
 
+import java.util.Properties
+
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def keystoreProperties = new Properties()
+def localKeyPropertiesFile = rootProject.file("key.properties")
+def sharedKeyPropertiesFile = new File(rootProject.projectDir.parentFile, "keys/key.properties")
+
+if (localKeyPropertiesFile.exists()) {
+    localKeyPropertiesFile.withInputStream { stream -> keystoreProperties.load(stream) }
+} else if (sharedKeyPropertiesFile.exists()) {
+    sharedKeyPropertiesFile.withInputStream { stream -> keystoreProperties.load(stream) }
+}
+
+def resolveStoreFile = { String configuredPath ->
+    if (!configuredPath) {
+        return null
+    }
+
+    def directFile = file(configuredPath)
+    if (directFile.exists()) {
+        return directFile
+    }
+
+    def androidRelativeFile = new File(rootProject.projectDir, configuredPath)
+    if (androidRelativeFile.exists()) {
+        return androidRelativeFile
+    }
+
+    def sharedKeysFile = new File(rootProject.projectDir.parentFile, "keys/${configuredPath}")
+    if (sharedKeysFile.exists()) {
+        return sharedKeysFile
+    }
+
+    return null
+}
 
 react {
-    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
+    // Keep the bundle entry path stable across normal paths and short-path junction builds.
+    entryFile = new File(projectRoot, "node_modules/expo-router/entry.js")
     reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
     hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
@@ -24,21 +59,27 @@ android {
 
     namespace 'com.Anushadeliverypartnerapp'
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId 'com.Anushadeliverypartnerapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 80
-        versionName "2.4.6"
+        versionCode project.hasProperty('versionCode') ? project.versionCode.toInteger() : 95
+        versionName project.hasProperty('versionName') ? project.versionName : "2.4.18"
     }
 
-    // 🔐 FINAL FIX (DIRECT SIGNING)
     signingConfigs {
         release {
-            storeFile file("../upload-key.jks")
-            storePassword "Anjibabu@2244"
-            keyAlias "upload"
-            keyPassword "Anjibabu@2244"
+            def resolvedStoreFile = resolveStoreFile(keystoreProperties.getProperty("storeFile"))
+            if (resolvedStoreFile != null) {
+                storeFile resolvedStoreFile
+            }
+            storePassword keystoreProperties.getProperty("storePassword")
+            keyAlias keystoreProperties.getProperty("keyAlias")
+            keyPassword keystoreProperties.getProperty("keyPassword")
         }
     }
 
@@ -48,7 +89,7 @@ android {
         }
 
         release {
-            signingConfig signingConfigs.release   // ✅ FIXED
+            signingConfig keystoreProperties.isEmpty() ? signingConfigs.debug : signingConfigs.release
             shrinkResources false
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
@@ -65,6 +106,7 @@ dependencies {
         implementation jscFlavor
     }
 }
+
 // Prevent clean-time CMake reconfigure failures when module codegen JNI folders
 // have already been cleaned from node_modules/**/android/build.
 tasks.matching { it.name.startsWith("externalNativeBuildClean") }.configureEach { cleanTask ->
@@ -75,11 +117,3 @@ tasks.matching { it.name.startsWith("externalNativeBuildClean") }.configureEach 
         }
     }
 }
-
-
-
-
-
-
-
-

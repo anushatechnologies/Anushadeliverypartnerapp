@@ -362,7 +362,7 @@ export default function OrdersTab() {
                   <Animated.View layout={Layout} style={StyleSheet.absoluteFill}>
                     <Animated.View style={StyleSheet.absoluteFill}>
                       <LinearGradient
-                        colors={['#6366F1', '#4F46E5']}
+                        colors={['#14A06D', '#0A6A4C']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                         style={styles.tabGradient}
@@ -427,7 +427,7 @@ export default function OrdersTab() {
           <Animated.View entering={ZoomIn.duration(400)} style={styles.detailsModalContent}>
             <View style={styles.detailsHeader}>
               <View style={styles.detailsLogoWrap}>
-                <MaterialCommunityIcons name="shopping" size={24} color="#6366F1" />
+                <MaterialCommunityIcons name="shopping" size={24} color="#14A06D" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.detailsOrderNum}>{selectedDetailOrder?.orderId}</Text>
@@ -491,7 +491,7 @@ export default function OrdersTab() {
               style={styles.detailsActionBtn}
             >
               <LinearGradient
-                colors={['#6366F1', '#4F46E5']}
+                colors={['#14A06D', '#0A6A4C']}
                 style={styles.detailsActionGradient}
               >
                 <Text style={styles.detailsActionText}>
@@ -642,7 +642,7 @@ export default function OrdersTab() {
                   ) : (
                     <View style={styles.cameraPlaceholder}>
                       <View style={styles.cameraIconWrap}>
-                        <MaterialCommunityIcons name="camera-plus" size={32} color="#6366F1" />
+                        <MaterialCommunityIcons name="camera-plus" size={32} color="#14A06D" />
                       </View>
                       <Text style={styles.cameraText}>Take Doorstep Photo</Text>
                       <Text style={styles.cameraSubText}>Make sure order items are visible</Text>
@@ -785,7 +785,7 @@ export default function OrdersTab() {
                             disabled={!deliveryPhoto}
                             style={[styles.scanAlternativeBtn, !deliveryPhoto && { opacity: 0.5, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' }]}
                           >
-                            <MaterialCommunityIcons name="qrcode-scan" size={20} color={!deliveryPhoto ? "#94A3B8" : "#6366F1"} />
+                            <MaterialCommunityIcons name="qrcode-scan" size={20} color={!deliveryPhoto ? "#94A3B8" : "#14A06D"} />
                             <Text style={[styles.scanAlternativeBtnText, !deliveryPhoto && { color: '#94A3B8' }]}>Scan App</Text>
                           </TouchableOpacity>
                         </View>
@@ -931,11 +931,11 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
           ]}>
             <View style={[
               styles.statusDot, 
-              { backgroundColor: isCompleted ? '#22C55E' : '#7C3AED' }
+              { backgroundColor: isCompleted ? '#22C55E' : '#0E8A63' }
             ]} />
             <Text style={[
               styles.statusPillText, 
-              { color: isCompleted ? '#166534' : '#7C3AED' }
+              { color: isCompleted ? '#166534' : '#0E8A63' }
             ]}>
               {order.status}
             </Text>
@@ -948,7 +948,7 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
         {order.vendorName && (
           <View style={[styles.vendorRow, order.pickupConfirmed && { opacity: 0.6 }]}>
             <View style={styles.iconCircleVendor}>
-              <MaterialCommunityIcons name={order.pickupConfirmed ? "check-circle" : "storefront"} size={18} color="#7C3AED" />
+              <MaterialCommunityIcons name={order.pickupConfirmed ? "check-circle" : "storefront"} size={18} color="#0E8A63" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.pickupLabel}>{order.pickupConfirmed ? "PICKED UP FROM" : "PICKUP FROM"}</Text>
@@ -957,7 +957,7 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
             </View>
             {order.vendorPhone && (
               <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.vendorPhone}`)} style={styles.phoneActionBtn}>
-                <MaterialCommunityIcons name="phone-outline" size={18} color="#7C3AED" />
+                <MaterialCommunityIcons name="phone-outline" size={18} color="#0E8A63" />
               </TouchableOpacity>
             )}
           </View>
@@ -989,7 +989,7 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
         {/* Meta Info Grid */}
         <View style={styles.metaGrid}>
           <View style={styles.metaCapsule}>
-            <MaterialCommunityIcons name="package-variant-closed" size={14} color="#6366F1" />
+            <MaterialCommunityIcons name="package-variant-closed" size={14} color="#14A06D" />
             <Text style={styles.metaCapsuleText}>{order.items} Items</Text>
           </View>
           <View style={styles.metaCapsule}>
@@ -1021,7 +1021,7 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
               style={styles.primaryActionBtn}
             >
               <LinearGradient
-                colors={['#6366F1', '#4F46E5']}
+                colors={['#14A06D', '#0A6A4C']}
                 style={styles.actionGradient}
               >
                 <Text style={styles.actionBtnText}>
@@ -1061,7 +1061,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   tabBtnActive: {
-    shadowColor: '#6366F1',
+    shadowColor: '#14A06D',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -1122,7 +1122,7 @@ const styles = StyleSheet.create({
   
   // Vendor Info Styles
   vendorRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconCircleVendor: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#F5F3FF', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EDE9FE' },
+  iconCircleVendor: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EDE9FE' },
   pickupLabel: { fontSize: 10, fontWeight: '800', color: '#64748B', letterSpacing: 0.5, marginBottom: 2 },
   vendorName: { fontSize: 15, fontWeight: '800', color: '#1E293B' },
   routeConnector: { height: 24, marginLeft: 20, borderLeftWidth: 2, borderLeftColor: '#E2E8F0', borderStyle: 'dotted', marginVertical: 2 },
@@ -1133,7 +1133,7 @@ const styles = StyleSheet.create({
   customerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   iconCircle: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
   customerName: { fontSize: 15, fontWeight: '800', color: '#1E293B' },
-  customerPhone: { fontSize: 13, fontWeight: '600', color: '#6366F1', marginTop: 1 },
+  customerPhone: { fontSize: 13, fontWeight: '600', color: '#14A06D', marginTop: 1 },
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
   addressText: { flex: 1, fontSize: 13, color: '#445569', fontWeight: '500', lineHeight: 20 },
   metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 20 },
@@ -1166,7 +1166,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     gap: 10,
     elevation: 8,
-    shadowColor: '#4F46E5',
+    shadowColor: '#0A6A4C',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
@@ -1218,7 +1218,7 @@ const styles = StyleSheet.create({
   
   stepContainer: { marginBottom: 20 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  stepNumber: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#6366F1', justifyContent: 'center', alignItems: 'center' },
+  stepNumber: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#14A06D', justifyContent: 'center', alignItems: 'center' },
   stepNumberText: { fontSize: 13, fontWeight: '900', color: '#FFFFFF' },
   stepTitle: { fontSize: 16, fontWeight: '800', color: '#334155' },
   
@@ -1233,7 +1233,7 @@ const styles = StyleSheet.create({
   },
   cameraBoxSuccess: { borderStyle: 'solid', borderColor: '#10B981' },
   cameraPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  cameraIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  cameraIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   cameraText: { fontSize: 15, fontWeight: '800', color: '#475569' },
   cameraSubText: { fontSize: 12, color: '#94A3B8', marginTop: 4, textAlign: 'center' },
   photoContainer: { flex: 1 },
@@ -1300,17 +1300,17 @@ const styles = StyleSheet.create({
   },
   scannerBtn: {
     height: 100,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#ECFDF5',
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#6366F1',
+    borderColor: '#14A06D',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
   scannerBtnActive: {
-    borderColor: '#6366F1',
+    borderColor: '#14A06D',
     borderStyle: 'solid',
   },
   scannerPlaceholder: {
@@ -1320,7 +1320,7 @@ const styles = StyleSheet.create({
   scannerBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#6366F1',
+    color: '#14A06D',
   },
   scanningWrap: {
     flex: 1,
@@ -1334,8 +1334,8 @@ const styles = StyleSheet.create({
     top: 0,
     width: '100%',
     height: 3,
-    backgroundColor: '#6366F1',
-    shadowColor: '#6366F1',
+    backgroundColor: '#14A06D',
+    shadowColor: '#14A06D',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 10,
@@ -1346,7 +1346,7 @@ const styles = StyleSheet.create({
   scanningText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#6366F1',
+    color: '#14A06D',
   },
   paymentSuccessBox: {
     height: 100,
@@ -1377,9 +1377,9 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   stepDotActive: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#14A06D',
     transform: [{ scale: 1.2 }],
-    shadowColor: '#6366F1',
+    shadowColor: '#14A06D',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 4,
@@ -1404,7 +1404,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0FDF4',
   },
   verifyOtpBtn: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#0E8A63',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
@@ -1467,7 +1467,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 16,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#ECFDF5',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1527,7 +1527,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#14A06D',
   },
   orderItemName: {
     fontSize: 14,
@@ -1573,7 +1573,7 @@ const styles = StyleSheet.create({
   },
   billTotalVal: {
     fontSize: 18,
-    color: '#6366F1',
+    color: '#14A06D',
     fontWeight: '900',
   },
   detailsActionBtn: {
@@ -1613,7 +1613,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#14A06D',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -1628,7 +1628,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#0E8A63',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -1683,12 +1683,12 @@ const styles = StyleSheet.create({
   scannerFrame: {
     height: 140,
     borderWidth: 2,
-    borderColor: '#6366F1',
+    borderColor: '#14A06D',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#ECFDF5',
   },
   scannerBtnGradient: {
     paddingVertical: 24,
@@ -1754,7 +1754,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 20,
     height: 20,
-    borderColor: '#6366F1',
+    borderColor: '#14A06D',
   },
   cornerTL: { top: 10, left: 10, borderLeftWidth: 3, borderTopWidth: 3 },
   cornerTR: { top: 10, right: 10, borderRightWidth: 3, borderTopWidth: 3 },
@@ -1826,7 +1826,7 @@ const styles = StyleSheet.create({
   resendText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#6366F1',
+    color: '#14A06D',
     textDecorationLine: 'underline',
   },
 
@@ -1856,7 +1856,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   paymentOnline: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#ECFDF5',
     borderColor: '#C7D2FE',
   },
   paymentCash: {
@@ -1895,7 +1895,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 40,
     height: 40,
-    borderColor: '#6366F1',
+    borderColor: '#14A06D',
   },
   targetTL: { top: -2, left: -2, borderTopWidth: 6, borderLeftWidth: 6, borderTopLeftRadius: 20 },
   targetTR: { top: -2, right: -2, borderTopWidth: 6, borderRightWidth: 6, borderTopRightRadius: 20 },
@@ -1904,8 +1904,8 @@ const styles = StyleSheet.create({
   scannerLaser: {
     width: '90%',
     height: 3,
-    backgroundColor: '#6366F1',
-    shadowColor: '#6366F1',
+    backgroundColor: '#14A06D',
+    shadowColor: '#14A06D',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 10,
@@ -1916,8 +1916,8 @@ const styles = StyleSheet.create({
   qrHelperText: { fontSize: 13, color: '#64748B', marginTop: 8, fontWeight: '500' },
   cashBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ECFDF5', paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#10B981', gap: 6 },
   cashBtnText: { fontSize: 14, color: '#10B981', fontWeight: 'bold' },
-  scanAlternativeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EEF2FF', paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#6366F1', gap: 6 },
-  scanAlternativeBtnText: { fontSize: 14, color: '#6366F1', fontWeight: 'bold' },
+  scanAlternativeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ECFDF5', paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#14A06D', gap: 6 },
+  scanAlternativeBtnText: { fontSize: 14, color: '#14A06D', fontWeight: 'bold' },
 
   scannerHint: {
     marginTop: 40,

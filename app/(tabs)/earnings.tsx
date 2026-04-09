@@ -188,7 +188,7 @@ export default function Earnings() {
 
               {payoutLoading ? (
                 <View style={styles.statusContent}>
-                   <ActivityIndicator size="large" color="#4F46E5" />
+                   <ActivityIndicator size="large" color="#0A6A4C" />
                    <Text style={styles.statusMainText}>Processing Payout...</Text>
                    <Text style={styles.statusSubText}>Securely transferring ₹1,250.00 to your linked bank account.</Text>
                 </View>
@@ -220,20 +220,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   safe: { flex: 1, backgroundColor: "#FFFFFF" },
   // Header styles removed as we are using PremiumHeader
-  payoutBtn: { backgroundColor: '#4F46E5', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  payoutBtn: { backgroundColor: '#0A6A4C', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, shadowColor: '#0A6A4C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
   payoutBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 68, paddingTop: 24, backgroundColor: '#F8FAFC', borderTopLeftRadius: 32, borderTopRightRadius: 32 },
-  mainCard: { backgroundColor: '#EEF2FF', borderRadius: 28, padding: 24, shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 15 }, shadowOpacity: 0.08, shadowRadius: 30, elevation: 8, marginBottom: 32, borderWidth: 1, borderColor: 'rgba(79,70,229,0.1)' },
+  mainCard: { backgroundColor: '#ECFDF5', borderRadius: 28, padding: 24, shadowColor: '#0A6A4C', shadowOffset: { width: 0, height: 15 }, shadowOpacity: 0.08, shadowRadius: 30, elevation: 8, marginBottom: 32, borderWidth: 1, borderColor: 'rgba(79,70,229,0.1)' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardLabel: { color: '#4F46E5', fontSize: 14, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardLabel: { color: '#0A6A4C', fontSize: 14, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   cardValue: { color: '#0F172A', fontSize: 34, fontWeight: '900', marginTop: 4 },
   periodBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(79,70,229,0.1)' },
-  periodText: { color: '#4F46E5', fontSize: 11, fontWeight: '800' },
+  periodText: { color: '#0A6A4C', fontSize: 11, fontWeight: '800' },
   divider: { height: 1, backgroundColor: 'rgba(79,70,229,0.1)', marginVertical: 24 },
   statsGrid: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statItem: { alignItems: 'center', flex: 1 },
   statSubValue: { color: '#0F172A', fontSize: 20, fontWeight: '900' },
-  statSubLabel: { color: '#4F46E5', fontSize: 13, fontWeight: '700', marginTop: 4, opacity: 0.9 },
+  statSubLabel: { color: '#0A6A4C', fontSize: 13, fontWeight: '700', marginTop: 4, opacity: 0.9 },
   statDivider: { width: 1, height: 30, backgroundColor: 'rgba(79,70,229,0.1)' },
   sectionTitle: { color: '#1A1A1A', fontSize: 18, fontWeight: '800', marginBottom: 20 },
   rateCard: { backgroundColor: '#F0FDF4', borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 4, marginBottom: 32, borderWidth: 1, borderColor: 'rgba(0,200,83,0.1)' },
@@ -259,6 +259,6 @@ const styles = StyleSheet.create({
   statusMainText: { fontSize: 22, fontWeight: '900', color: '#0F172A', marginTop: 24, textAlign: 'center' },
   statusSubText: { fontSize: 15, color: '#64748B', textAlign: 'center', marginTop: 12, lineHeight: 22 },
   successIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#DCFCE7', justifyContent: 'center', alignItems: 'center' },
-  closeBtn: { backgroundColor: '#4F46E5', width: '100%', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 32 },
+  closeBtn: { backgroundColor: '#0A6A4C', width: '100%', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 32 },
   closeBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
 });

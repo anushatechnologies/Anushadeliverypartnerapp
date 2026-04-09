@@ -1,10 +1,13 @@
-import { buildImageFilePart } from '@/utils/multipart';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import { apiClient } from './apiClient';
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
 
 export const documentService = {
   /**
    * POST /api/documents/upload — Upload KYC document (multipart/form-data)
-   * Supports: AADHAAR_CARD, PAN_CARD, DRIVING_LICENSE
+   * Supports: AADHAAR_FRONT, AADHAAR_BACK, PAN_CARD, DRIVING_LICENSE, RC_BOOK, INSURANCE
    */
   uploadDocument: async (
     deliveryPersonId: number,
@@ -13,55 +16,57 @@ export const documentService = {
     fileUri: string,
     jwtToken?: string,
   ) => {
-    const formData = new FormData();
-    formData.append('deliveryPersonId', deliveryPersonId.toString());
-    formData.append('documentType', documentType);
+    const storedToken = await AsyncStorage.getItem('@anusha_jwt_token');
+    const token = jwtToken || storedToken;
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    if (documentNumber) {
-      formData.append('documentNumber', documentNumber);
-    }
+    const parameters: Record<string, string> = {
+      deliveryPersonId: deliveryPersonId.toString(),
+      documentType,
+    };
+    if (documentNumber) parameters.documentNumber = documentNumber;
 
-    const uploadUrl = '/api/documents/upload';
-    const filePart = buildImageFilePart(fileUri, `${documentType.toLowerCase()}.jpg`);
-    formData.append('file', filePart);
-
-    console.log('[DOC UPLOAD] Starting upload', {
+    console.log('[DOC UPLOAD] Starting upload via FileSystem.uploadAsync', {
       deliveryPersonId,
       documentType,
       hasDocumentNumber: Boolean(documentNumber),
       fileUri,
-      fileName: filePart.name,
-      hasJwtToken: Boolean(jwtToken),
+      hasToken: Boolean(token),
     });
 
-    try {
-      // Pass JWT via config.headers — the request interceptor strips Content-Type
-      // so React Native sets the correct multipart boundary automatically.
-      const res = await apiClient.post(uploadUrl, formData, {
-        headers: jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {},
-        timeout: 120000, // 2 min for large document images
-      });
+    const result = await FileSystem.uploadAsync(
+      `${BASE_URL}/api/documents/upload`,
+      fileUri,
+      {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        mimeType: 'image/jpeg',
+        parameters,
+        headers,
+      },
+    );
 
-      console.log('[DOC UPLOAD] Upload success', {
-        deliveryPersonId,
-        documentType,
-        status: res.status,
-        documentId: res.data?.document?.id,
-        backendMessage: res.data?.message,
-      });
+    console.log('[DOC UPLOAD] Response', {
+      deliveryPersonId,
+      documentType,
+      status: result.status,
+      body: result.body,
+    });
 
-      return res.data;
-    } catch (error: any) {
-      console.warn('[DOC UPLOAD] Upload failed', {
-        deliveryPersonId,
-        documentType,
-        message: error?.message,
-        status: error?.response?.status,
-        response: error?.response?.data,
-        url: `${error?.config?.baseURL || ''}${error?.config?.url || uploadUrl}`,
-      });
-      throw error;
+    if (result.status < 200 || result.status >= 300) {
+      const msg = (() => {
+        try {
+          return JSON.parse(result.body)?.message;
+        } catch {
+          return result.body;
+        }
+      })();
+      throw new Error(msg || `Upload failed with status ${result.status}`);
     }
+
+    return JSON.parse(result.body);
   },
 
   /** GET /api/documents/validation-rules — Get document validation rules */

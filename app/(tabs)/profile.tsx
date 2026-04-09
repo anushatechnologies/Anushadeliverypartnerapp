@@ -18,12 +18,9 @@ import {
   Linking,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import firebase from "firebase/compat/app";
-import "firebase/compat/storage";
 import { useUser } from "../../context/UserContext";
 import { useLanguage, Language } from "../../context/LanguageContext";
 import Animated, { FadeInDown, FadeInUp, FadeInLeft } from "react-native-reanimated";
@@ -34,7 +31,6 @@ import CustomTouchableOpacity from "../../components/CustomTouchableOpacity";
 import PremiumPopup, { PopupType } from "../../components/PremiumPopup";
 import { orderService } from "../../services/orderService";
 import { profileService } from "../../services/profileService";
-import { documentService } from "../../services/documentService";
 
 const { width } = Dimensions.get("window");
 
@@ -44,6 +40,7 @@ export default function Profile() {
   const { language, setLanguage, t } = useLanguage();
   const [personalModal, setPersonalModal] = useState(false);
   const [vehicleModal, setVehicleModal] = useState(false);
+  const [bankModal, setBankModal] = useState(false);
   const [langModal, setLangModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -83,7 +80,7 @@ export default function Profile() {
            onPress: async () => {
              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
              if (status !== 'granted') return Alert.alert("Required", "Gallery access is needed.");
-             const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.3 });
+             const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.3 });
              if (!result.canceled && result.assets) uploadPhoto(result.assets[0].uri);
            }
          },
@@ -96,29 +93,17 @@ export default function Profile() {
      setIsUploadingPhoto(true);
      try {
         if (!user || (!user.id && user.id !== 0)) throw new Error("Missing Account Context");
-        
-        let fileUrl = "";
-        try {
-           const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-           const ref = firebase.storage().ref().child(`profiles/${user.phone}_${Date.now()}.jpg`);
-           await ref.putString(`data:image/jpeg;base64,${base64}`, 'data_url');
-           fileUrl = await ref.getDownloadURL();
-        } catch (uploadObjErr) {
-           console.warn("Storage Sync Failed:", uploadObjErr);
-           throw new Error("Could not securely upload photo to bucket.");
+
+        const response = await profileService.updateProfilePhoto(uri);
+        const nextPhotoUrl =
+          response?.photoUrl ||
+          response?.profilePhotoUrl ||
+          response?.deliveryPerson?.profilePhotoUrl;
+
+        if (nextPhotoUrl) {
+          await updateProfile({ photo: nextPhotoUrl });
         }
 
-        const parts = (user.name || "Rider Partner").split(" ");
-        const firstName = parts[0];
-        const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
-
-        await profileService.updateProfileDetails({
-           firstName,
-           lastName,
-           profilePhotoUrl: fileUrl
-        });
-
-        await updateProfile({ photo: fileUrl }); // Update local UI immediately
         Alert.alert("Success", "Profile photo synced for Admin approval!");
      } catch (err: any) {
         console.warn("Avatar PUT Failed:", err?.response?.data || err?.message);
@@ -165,7 +150,7 @@ export default function Profile() {
           {/* Profile Premium Header */}
           <Animated.View entering={FadeInDown.duration(600)} style={styles.profileHeaderOuter}>
             <LinearGradient
-              colors={['#7C3AED', '#6366F1']}
+              colors={['#10221A', '#153D2E']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.profileHeaderGradient}
@@ -175,13 +160,13 @@ export default function Profile() {
                   <View style={styles.avatarRing}>
                     {isUploadingPhoto ? (
                       <View style={styles.avatarPlaceholder}>
-                         <ActivityIndicator size="small" color="#7C3AED" />
+                         <ActivityIndicator size="small" color="#0E8A63" />
                       </View>
                     ) : user?.photo ? (
                       <Image source={{ uri: user.photo }} style={styles.avatar} />
                     ) : (
                       <View style={styles.avatarPlaceholder}>
-                        <MaterialCommunityIcons name="account" size={40} color="#7C3AED" />
+                        <MaterialCommunityIcons name="account" size={40} color="#0E8A63" />
                       </View>
                     )}
                   </View>
@@ -205,7 +190,7 @@ export default function Profile() {
                 label="Total Trips"
                 value={profileStats.totalTrips.toString()}
                 icon="bike"
-                color="#7C3AED"
+                color="#0E8A63"
                 colors={['#1E293B', '#0F172A']}
              />
              <StatCardMini
@@ -222,14 +207,45 @@ export default function Profile() {
             <Text style={styles.sectionHeaderTitle}>Account Configuration</Text>
           </View>
 
+          {isApproved && (
+            <View style={styles.lockedBanner}>
+              <MaterialCommunityIcons name="lock-check-outline" size={16} color="#166534" />
+              <Text style={styles.lockedBannerText}>Account approved — personal, vehicle and bank details are locked. Contact support to modify.</Text>
+            </View>
+          )}
+
           <View style={styles.menuGroupCard}>
-             <MenuAction icon="account-details-outline" label="Personal Details" onPress={() => setPersonalModal(true)} />
+             <MenuAction
+               icon="account-details-outline"
+               label="Personal Details"
+               locked={isApproved}
+               onPress={() => isApproved
+                 ? Alert.alert('Locked', 'Personal details are locked after admin approval. Contact support to make changes.')
+                 : setPersonalModal(true)
+               }
+             />
              <View style={styles.menuDividerLine} />
-             <MenuAction 
-               icon="car-info" 
-               label="Vehicle Information" 
-               onPress={() => setVehicleModal(true)} 
-               value={user?.vehicleModel ? `${user.vehicleType} (${user.vehicleModel})` : user?.vehicleType} 
+             <MenuAction
+               icon="car-info"
+               label="Vehicle Information"
+               locked={isApproved}
+               onPress={() => isApproved
+                 ? Alert.alert('Locked', 'Vehicle details are locked after admin approval. Contact support to make changes.')
+                 : setVehicleModal(true)
+               }
+               value={user?.vehicleModel ? `${user.vehicleType} (${user.vehicleModel})` : user?.vehicleType}
+             />
+             <View style={styles.menuDividerLine} />
+             <View style={styles.menuDividerLine} />
+             <MenuAction
+               icon="bank-outline"
+               label="Bank Details"
+               locked={isApproved}
+               onPress={() => isApproved
+                 ? Alert.alert('Locked', 'Bank details are locked after admin approval. Contact support to make changes.')
+                 : setBankModal(true)
+               }
+               value={user?.bankName || undefined}
              />
              <View style={styles.menuDividerLine} />
              <MenuAction icon="shield-check-outline" label="KYC Verification" onPress={() => router.push("/kyc")} status={authState.verificationStatus || 'Pending'} />
@@ -291,7 +307,7 @@ export default function Profile() {
                     <Text style={[styles.langCellText, language === 'en' && styles.langCellTextActive]}>English</Text>
                     <Text style={styles.langCellSub}>System Default</Text>
                  </View>
-                 {language === 'en' && <MaterialCommunityIcons name="check-circle" size={24} color="#7C3AED" />}
+                 {language === 'en' && <MaterialCommunityIcons name="check-circle" size={24} color="#0E8A63" />}
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => changeLang('te')} style={[styles.langCell, language === 'te' && styles.langCellActive]}>
@@ -299,7 +315,7 @@ export default function Profile() {
                     <Text style={[styles.langCellText, language === 'te' && styles.langCellTextActive]}>తెలుగు (Telugu)</Text>
                     <Text style={styles.langCellSub}>Regional Language</Text>
                  </View>
-                 {language === 'te' && <MaterialCommunityIcons name="check-circle" size={24} color="#7C3AED" />}
+                 {language === 'te' && <MaterialCommunityIcons name="check-circle" size={24} color="#0E8A63" />}
               </TouchableOpacity>
            </Animated.View>
         </View>
@@ -314,12 +330,22 @@ export default function Profile() {
         onSuccess={showSuccessPopup}
       />
 
-      <EditVehicleModal 
-        visible={vehicleModal} 
-        onClose={() => setVehicleModal(false)} 
+      <EditVehicleModal
+        visible={vehicleModal}
+        onClose={() => setVehicleModal(false)}
         initialType={user?.vehicleType || "Bike"}
         initialModel={user?.vehicleModel || ""}
         initialRegNo={user?.registrationNumber || ""}
+        onSuccess={showSuccessPopup}
+      />
+
+      <BankDetailsModal
+        visible={bankModal}
+        onClose={() => setBankModal(false)}
+        initialAccountName={user?.accountName || ""}
+        initialAccountNumber={user?.accountNumber || ""}
+        initialBankName={user?.bankName || ""}
+        initialIfscCode={user?.ifscCode || ""}
         onSuccess={showSuccessPopup}
       />
 
@@ -342,7 +368,7 @@ export default function Profile() {
                    icon="phone-in-talk" 
                    label="Call Support" 
                    desc="Call: 6309981555" 
-                   color="#4F46E5" 
+                   color="#0A6A4C" 
                    onPress={() => Linking.openURL('tel:6309981555')} 
                  />
                  <SupportTile 
@@ -412,14 +438,14 @@ function StatCardMini({ label, value, icon, color, colors }: StatCardMiniProps) 
   );
 }
 
-function MenuAction({ icon, label, onPress, value, status }: any) {
+function MenuAction({ icon, label, onPress, value, status, locked }: any) {
   return (
-    <TouchableOpacity onPress={onPress} style={styles.menuLineItem}>
+    <TouchableOpacity onPress={onPress} style={[styles.menuLineItem, locked && { opacity: 0.75 }]}>
        <View style={styles.menuLineLeft}>
-          <View style={[styles.menuLineIconBox, { backgroundColor: '#F1F5F9' }]}>
-             <MaterialCommunityIcons name={icon} size={20} color="#64748B" />
+          <View style={[styles.menuLineIconBox, { backgroundColor: locked ? '#F8FAFC' : '#F1F5F9' }]}>
+             <MaterialCommunityIcons name={icon} size={20} color={locked ? '#94A3B8' : '#64748B'} />
           </View>
-          <Text style={styles.menuLineLabel}>{label}</Text>
+          <Text style={[styles.menuLineLabel, locked && { color: '#94A3B8' }]}>{label}</Text>
        </View>
        <View style={styles.menuLineRight}>
           {value && <Text style={styles.menuLineValue}>{value}</Text>}
@@ -428,7 +454,11 @@ function MenuAction({ icon, label, onPress, value, status }: any) {
                <Text style={[styles.menuStatusBadgeText, { color: status === 'approved' ? '#166534' : '#92400E' }]}>{status}</Text>
             </View>
           )}
-          <MaterialCommunityIcons name="chevron-right" size={20} color="#CBD5E1" />
+          <MaterialCommunityIcons
+            name={locked ? 'lock-outline' : 'chevron-right'}
+            size={20}
+            color={locked ? '#94A3B8' : '#CBD5E1'}
+          />
        </View>
     </TouchableOpacity>
   );
@@ -597,6 +627,121 @@ function EditVehicleModal({ visible, onClose, initialType, initialModel, initial
   );
 }
 
+function BankDetailsModal({ visible, onClose, initialAccountName, initialAccountNumber, initialBankName, initialIfscCode, onSuccess }: any) {
+  const [accountName, setAccountName] = useState(initialAccountName || "");
+  const [accountNumber, setAccountNumber] = useState(initialAccountNumber || "");
+  const [confirmAccountNumber, setConfirmAccountNumber] = useState(initialAccountNumber || "");
+  const [bankName, setBankName] = useState(initialBankName || "");
+  const [ifscCode, setIfscCode] = useState(initialIfscCode || "");
+  const [loading, setLoading] = useState(false);
+
+  const handleSave = async () => {
+    if (!accountName.trim()) return Alert.alert("Required", "Please enter the account holder name.");
+    if (!accountNumber.trim() || accountNumber.length < 9) return Alert.alert("Invalid", "Account number must be at least 9 digits.");
+    if (accountNumber !== confirmAccountNumber) return Alert.alert("Mismatch", "Account numbers do not match. Please re-enter.");
+    if (!bankName.trim()) return Alert.alert("Required", "Please enter the bank name.");
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifscRegex.test(ifscCode.toUpperCase())) return Alert.alert("Invalid IFSC", "IFSC code format should be like SBIN0001234.");
+
+    setLoading(true);
+    try {
+      await profileService.updateBankDetails({
+        accountName: accountName.trim(),
+        accountNumber: accountNumber.trim(),
+        bankName: bankName.trim(),
+        ifscCode: ifscCode.toUpperCase().trim(),
+      });
+      onClose();
+      setTimeout(() => onSuccess("Bank details saved successfully."), 400);
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || "Unknown error";
+      Alert.alert("Save Failed", msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.modalOverlayCenteredAlpha}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
+          <Animated.View entering={FadeInUp} style={[styles.infoSheetBox, { padding: 24 }]}>
+            <View style={[styles.modalSheetHeader, { marginBottom: 4 }]}>
+              <Text style={styles.modalSheetTitle}>Bank Details</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeModalBtn}>
+                <MaterialCommunityIcons name="close" size={24} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ color: '#64748B', fontSize: 12, marginBottom: 20 }}>Used for salary and delivery earnings payouts</Text>
+
+            <Text style={styles.inputLabelMicro}>ACCOUNT HOLDER NAME</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="As per bank records"
+              placeholderTextColor="#94A3B8"
+              value={accountName}
+              onChangeText={setAccountName}
+              autoCapitalize="words"
+            />
+
+            <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>BANK NAME</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. State Bank of India"
+              placeholderTextColor="#94A3B8"
+              value={bankName}
+              onChangeText={setBankName}
+              autoCapitalize="words"
+            />
+
+            <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>ACCOUNT NUMBER</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Enter account number"
+              placeholderTextColor="#94A3B8"
+              value={accountNumber}
+              onChangeText={setAccountNumber}
+              keyboardType="number-pad"
+              secureTextEntry={false}
+            />
+
+            <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>CONFIRM ACCOUNT NUMBER</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Re-enter account number"
+              placeholderTextColor="#94A3B8"
+              value={confirmAccountNumber}
+              onChangeText={setConfirmAccountNumber}
+              keyboardType="number-pad"
+            />
+
+            <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>IFSC CODE</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. SBIN0001234"
+              placeholderTextColor="#94A3B8"
+              value={ifscCode}
+              onChangeText={(v) => setIfscCode(v.toUpperCase())}
+              autoCapitalize="characters"
+              maxLength={11}
+            />
+
+            <TouchableOpacity
+              onPress={handleSave}
+              disabled={loading}
+              style={[styles.modalActionBtnPrimary, loading && { opacity: 0.7 }, { marginTop: 24 }]}
+            >
+              {loading
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.modalActionBtnTextPrimary}>Save Bank Details</Text>}
+            </TouchableOpacity>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
 function SupportTile({ icon, label, desc, color, onPress }: { icon: any, label: string, desc: string, color: string, onPress: () => void }) {
   return (
     <TouchableOpacity onPress={onPress} style={styles.supportListItem}>
@@ -640,6 +785,9 @@ const styles = StyleSheet.create({
   statCellValue: { fontSize: 18, fontWeight: '900', color: '#FFFFFF' },
   statCellLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
 
+  lockedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#86EFAC', borderRadius: 12, padding: 12, marginBottom: 12 },
+  lockedBannerText: { flex: 1, color: '#166534', fontSize: 12, fontWeight: '600', lineHeight: 18 },
+
   sectionHeadingRow: { marginBottom: 12, marginLeft: 4 },
   sectionHeaderTitle: { color: '#64748B', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
   menuGroupCard: { backgroundColor: '#FFFFFF', borderRadius: 28, padding: 8, marginBottom: 28, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, borderWidth: 1, borderColor: '#F1F5F9' },
@@ -668,10 +816,10 @@ const styles = StyleSheet.create({
   closeModalBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   
   langCell: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderRadius: 24, marginBottom: 12, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#F1F5F9' },
-  langCellActive: { backgroundColor: '#F5F3FF', borderColor: '#7C3AED' },
+  langCellActive: { backgroundColor: '#F0FDF4', borderColor: '#0E8A63' },
   langCellLeft: { gap: 2 },
   langCellText: { fontSize: 17, fontWeight: '800', color: '#1E293B' },
-  langCellTextActive: { color: '#7C3AED' },
+  langCellTextActive: { color: '#0E8A63' },
   langCellSub: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
 
   supportGridList: { gap: 16, marginBottom: 28 },
@@ -699,14 +847,14 @@ const styles = StyleSheet.create({
   infoDataItem: { marginBottom: 20 },
   infoDataLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
   infoDataValue: { color: '#1E293B', fontSize: 18, fontWeight: '700', marginTop: 4 },
-  modalActionBtnPrimary: { backgroundColor: '#7C3AED', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 12, shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
+  modalActionBtnPrimary: { backgroundColor: '#0E8A63', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 12, shadowColor: '#0E8A63', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
   modalActionBtnTextPrimary: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
 
   inputLabelMicro: { fontSize: 11, fontWeight: '800', color: '#64748B', letterSpacing: 1, marginBottom: 8 },
   modalInput: { backgroundColor: '#F8FAFC', paddingHorizontal: 16, height: 56, borderRadius: 16, fontSize: 16, fontWeight: '700', color: '#1E293B', borderWidth: 1, borderColor: '#E2E8F0' },
   vehicleChipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   vChip: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
-  vChipActive: { backgroundColor: '#F5F3FF', borderColor: '#7C3AED' },
+  vChipActive: { backgroundColor: '#F0FDF4', borderColor: '#0E8A63' },
   vChipText: { color: '#64748B', fontSize: 14, fontWeight: '700' },
-  vChipTextActive: { color: '#7C3AED' },
+  vChipTextActive: { color: '#0E8A63' },
 });

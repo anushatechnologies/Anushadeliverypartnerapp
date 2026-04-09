@@ -1,6 +1,9 @@
 import type { DeliveryAuthResponse } from '@/types/partner';
-import { buildImageFilePart } from '@/utils/multipart';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import { apiClient } from './apiClient';
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
 
 interface SignupPayload {
   firebaseIdToken: string;
@@ -22,13 +25,38 @@ export const authService = {
   },
 
   uploadProfilePhoto: async (fileUri: string) => {
-    const formData = new FormData();
-    formData.append('file', buildImageFilePart(fileUri, 'partner-profile.jpg'));
-    // No Content-Type header — interceptor removes it so RN sets correct multipart boundary
-    const res = await apiClient.post('/api/delivery/auth/upload-profile-photo', formData, {
-      timeout: 120000, // 2 min for photo upload
-    });
-    return res.data as { success?: boolean; photoUrl: string; message?: string };
+    const token = await AsyncStorage.getItem('@anusha_jwt_token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    console.log('[PHOTO UPLOAD] Starting upload via FileSystem.uploadAsync', { fileUri });
+
+    const result = await FileSystem.uploadAsync(
+      `${BASE_URL}/api/delivery/auth/upload-profile-photo`,
+      fileUri,
+      {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        mimeType: 'image/jpeg',
+        headers,
+      },
+    );
+
+    console.log('[PHOTO UPLOAD] Response', { status: result.status, body: result.body });
+
+    if (result.status < 200 || result.status >= 300) {
+      const msg = (() => {
+        try {
+          return JSON.parse(result.body)?.message;
+        } catch {
+          return result.body;
+        }
+      })();
+      throw new Error(msg || `Upload failed with status ${result.status}`);
+    }
+
+    return JSON.parse(result.body) as { success?: boolean; photoUrl: string; message?: string };
   },
 
   signup: async (data: SignupPayload) => {

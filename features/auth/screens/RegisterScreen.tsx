@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  FlatList,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,7 +28,9 @@ import {
 import { partnerTheme } from '@/constants/partnerTheme';
 import { useUser, type VerificationStatus } from '@/context/UserContext';
 import { authService } from '@/services/authService';
+import { bankService, type BankOption } from '@/services/bankService';
 import { onboardingService } from '@/services/onboardingService';
+import { profileService } from '@/services/profileService';
 import type {
   RegistrationDocumentKey,
   RegistrationFormValues,
@@ -89,6 +94,18 @@ export default function RegisterScreen() {
   });
   const [uploads, setUploads] = useState<RegistrationUploads>(emptyUploads);
 
+  // ── Bank details state (Step 4) ─────────────────────────────────────────────
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [bankConfirmNumber, setBankConfirmNumber] = useState('');
+  const [bankIfscCode, setBankIfscCode] = useState('');
+  const [bankSearchQuery, setBankSearchQuery] = useState('');
+  const [bankOptions, setBankOptions] = useState<BankOption[]>([]);
+  const [bankSearching, setBankSearching] = useState(false);
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+  const bankSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (initialPhone && form.phone !== initialPhone) {
       setForm((current) => ({ ...current, phone: initialPhone }));
@@ -145,12 +162,53 @@ export default function RegisterScreen() {
     insuranceValid &&
     (!uploads.insurance || Boolean(insuranceValue));
 
+  const bankStepComplete =
+    Boolean(bankAccountName.trim()) &&
+    Boolean(bankName.trim()) &&
+    Boolean(bankAccountNumber.trim()) &&
+    bankAccountNumber === bankConfirmNumber &&
+    /^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankIfscCode.toUpperCase());
+
   const stepCompletion = [
     phoneVerified && isValidPhone,
     personalStepComplete,
     vehicleStepComplete,
     documentsStepComplete,
+    bankStepComplete,
   ];
+
+  const searchBanks = (query: string) => {
+    setBankSearchQuery(query);
+    setBankDropdownOpen(true);
+    if (bankSearchTimer.current) clearTimeout(bankSearchTimer.current);
+    if (!query.trim()) {
+      setBankOptions([]);
+      setBankDropdownOpen(false);
+      return;
+    }
+    setBankSearching(true);
+    bankSearchTimer.current = setTimeout(async () => {
+      try {
+        const results = await bankService.search(query);
+        setBankOptions(results);
+      } catch {
+        setBankOptions([]);
+      } finally {
+        setBankSearching(false);
+      }
+    }, 350);
+  };
+
+  const selectBank = (bank: BankOption) => {
+    setBankName(bank.name);
+    setBankSearchQuery(bank.name);
+    setBankDropdownOpen(false);
+    setBankOptions([]);
+    // Auto-fill IFSC prefix if not already set
+    if (!bankIfscCode && bank.ifscPrefix) {
+      setBankIfscCode(bank.ifscPrefix + '0');
+    }
+  };
 
   // EV: show info notice in the vehicle step
   const evNotice = isEV ? (
@@ -359,10 +417,20 @@ export default function RegisterScreen() {
     return true;
   };
 
+  const validateBankStep = () => {
+    if (!bankAccountName.trim()) { Alert.alert('Required', 'Enter account holder name.'); return false; }
+    if (!bankName.trim()) { Alert.alert('Required', 'Select your bank from the search list.'); return false; }
+    if (bankAccountNumber.trim().length < 9) { Alert.alert('Invalid', 'Account number must be at least 9 digits.'); return false; }
+    if (bankAccountNumber !== bankConfirmNumber) { Alert.alert('Mismatch', 'Account numbers do not match. Please re-enter.'); return false; }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankIfscCode.toUpperCase())) { Alert.alert('Invalid IFSC', 'IFSC format should be like SBIN0001234.'); return false; }
+    return true;
+  };
+
   const goNext = () => {
     if (currentStep === 1 && !validatePersonalStep()) return;
     if (currentStep === 2 && !validateVehicleStep()) return;
-    setCurrentStep((step) => Math.min(step + 1, 3));
+    if (currentStep === 3 && !validateDocumentsStep()) return;
+    setCurrentStep((step) => Math.min(step + 1, 4));
   };
 
   const submitRegistration = async () => {
@@ -371,12 +439,11 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (!validateDocumentsStep()) {
-      return;
-    }
+    if (!validateBankStep()) return;
 
     setSubmitting(true);
     try {
+      // Step 1: complete registration (profile + docs)
       const response = await onboardingService.completeRegistration({
         firebaseIdToken,
         form,
@@ -398,9 +465,25 @@ export default function RegisterScreen() {
           vehicleModel: response.vehicleModel || form.vehicleModel,
           registrationNumber: response.registrationNumber || form.registrationNumber,
           photo: response.profilePhotoUrl || uploads.profilePhoto,
+          bankName: bankName,
+          accountName: bankAccountName,
+          accountNumber: bankAccountNumber,
+          ifscCode: bankIfscCode.toUpperCase(),
         },
         verificationStatus,
       );
+
+      // Step 2: save bank details (non-blocking — signup already done)
+      try {
+        await profileService.updateBankDetails({
+          accountName: bankAccountName.trim(),
+          accountNumber: bankAccountNumber.trim(),
+          bankName: bankName.trim(),
+          ifscCode: bankIfscCode.toUpperCase().trim(),
+        });
+      } catch {
+        // Bank details can be updated later from profile — don't block navigation
+      }
 
       Alert.alert(
         'Application submitted',
@@ -708,7 +791,134 @@ export default function RegisterScreen() {
               onPress={() => setCurrentStep(2)}
             />
             <PartnerButton
-              label="Submit application"
+              label="Next"
+              icon="arrow-right"
+              style={styles.rowButton}
+              onPress={goNext}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      {currentStep === 4 ? (
+        <View style={styles.sectionStack}>
+          {/* Bank info notice */}
+          <View style={styles.bankNoticeCard}>
+            <MaterialCommunityIcons name="bank-outline" size={22} color="#0E8A63" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bankNoticeTitle}>Salary & earnings payout</Text>
+              <Text style={styles.bankNoticeText}>Your delivery earnings will be transferred to this account. Double-check the details before submitting.</Text>
+            </View>
+          </View>
+
+          {/* Bank search */}
+          <View>
+            <PartnerInput
+              label="Bank name"
+              icon="magnify"
+              value={bankSearchQuery}
+              onChangeText={searchBanks}
+              placeholder="Search your bank (e.g. State Bank)"
+              returnKeyType="search"
+              rightSlot={bankSearching ? <ActivityIndicator size="small" color="#0E8A63" /> : undefined}
+            />
+            {bankDropdownOpen && bankOptions.length > 0 && (
+              <View style={styles.bankDropdown}>
+                <FlatList
+                  data={bankOptions}
+                  keyExtractor={(item) => String(item.id)}
+                  scrollEnabled={false}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.bankDropdownItem}
+                      onPress={() => selectBank(item)}
+                    >
+                      <MaterialCommunityIcons name="bank" size={18} color="#0E8A63" />
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={styles.bankDropdownName}>{item.name}</Text>
+                        <Text style={styles.bankDropdownCode}>{item.ifscPrefix} · {item.shortCode}</Text>
+                      </View>
+                      <MaterialCommunityIcons name="chevron-right" size={16} color="#8A9B93" />
+                    </TouchableOpacity>
+                  )}
+                  ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: '#EEF5EC' }} />}
+                />
+              </View>
+            )}
+          </View>
+
+          <PartnerInput
+            label="Account holder name"
+            icon="account-outline"
+            value={bankAccountName}
+            onChangeText={setBankAccountName}
+            placeholder="As per your bank records"
+            autoCapitalize="words"
+          />
+
+          <PartnerInput
+            label="Account number"
+            icon="credit-card-outline"
+            value={bankAccountNumber}
+            onChangeText={setBankAccountNumber}
+            keyboardType="number-pad"
+            placeholder="Enter account number"
+            rightSlot={
+              bankAccountNumber.length >= 9
+                ? <MaterialCommunityIcons name="check-circle" size={20} color="#16A34A" />
+                : undefined
+            }
+          />
+
+          <PartnerInput
+            label="Confirm account number"
+            icon="credit-card-check-outline"
+            value={bankConfirmNumber}
+            onChangeText={setBankConfirmNumber}
+            keyboardType="number-pad"
+            placeholder="Re-enter account number"
+            rightSlot={
+              bankConfirmNumber.length >= 9
+                ? <MaterialCommunityIcons
+                    name={bankAccountNumber === bankConfirmNumber ? 'check-circle' : 'alert-circle-outline'}
+                    size={20}
+                    color={bankAccountNumber === bankConfirmNumber ? '#16A34A' : '#DC2626'}
+                  />
+                : undefined
+            }
+          />
+
+          <PartnerInput
+            label="IFSC code"
+            icon="bank-transfer"
+            value={bankIfscCode}
+            onChangeText={(v) => setBankIfscCode(v.toUpperCase())}
+            placeholder="e.g. SBIN0001234"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={11}
+            rightSlot={
+              bankIfscCode.length === 11
+                ? <MaterialCommunityIcons
+                    name={/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankIfscCode) ? 'check-circle' : 'alert-circle-outline'}
+                    size={20}
+                    color={/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankIfscCode) ? '#16A34A' : '#DC2626'}
+                  />
+                : undefined
+            }
+            helperText="11-character code. Example: SBIN0001234"
+          />
+
+          <View style={styles.buttonRow}>
+            <PartnerButton
+              label="Back"
+              variant="secondary"
+              icon="arrow-left"
+              style={styles.rowButton}
+              onPress={() => setCurrentStep(3)}
+            />
+            <PartnerButton
+              label={submitting ? 'Submitting...' : 'Submit application'}
               icon="check-circle-outline"
               loading={submitting}
               style={styles.rowButton}
@@ -820,5 +1030,58 @@ const styles = StyleSheet.create({
     color: '#15803D',
     fontSize: 13,
     fontWeight: '600',
+  },
+  bankNoticeCard: {
+    borderRadius: partnerTheme.radius.md,
+    backgroundColor: '#EFF8F4',
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.borderStrong,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  bankNoticeTitle: {
+    color: partnerTheme.colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  bankNoticeText: {
+    color: partnerTheme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  bankDropdown: {
+    marginTop: 4,
+    borderRadius: partnerTheme.radius.md,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  bankDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: '#FFFFFF',
+  },
+  bankDropdownName: {
+    color: partnerTheme.colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bankDropdownCode: {
+    color: partnerTheme.colors.textSoft,
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
   },
 });
