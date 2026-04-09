@@ -1,3 +1,4 @@
+import { buildImageFilePart } from '@/utils/multipart';
 import { apiClient } from './apiClient';
 
 export const documentService = {
@@ -5,23 +6,62 @@ export const documentService = {
    * POST /api/documents/upload — Upload KYC document (multipart/form-data)
    * Supports: AADHAAR_CARD, PAN_CARD, DRIVING_LICENSE
    */
-  uploadDocument: async (deliveryPersonId: number, documentType: string, documentNumber: string | null, fileUri: string) => {
+  uploadDocument: async (
+    deliveryPersonId: number,
+    documentType: string,
+    documentNumber: string | null,
+    fileUri: string,
+    jwtToken?: string,
+  ) => {
     const formData = new FormData();
     formData.append('deliveryPersonId', deliveryPersonId.toString());
     formData.append('documentType', documentType);
-    if (documentNumber) formData.append('documentNumber', documentNumber);
-    
-    // Parse file info
-    const filename = fileUri.split('/').pop() || 'document.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : `image/jpeg`;
-    
-    formData.append('file', { uri: fileUri, name: filename, type } as any);
-    
-    const res = await apiClient.post('/api/documents/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+
+    if (documentNumber) {
+      formData.append('documentNumber', documentNumber);
+    }
+
+    const uploadUrl = '/api/documents/upload';
+    const filePart = buildImageFilePart(fileUri, `${documentType.toLowerCase()}.jpg`);
+    formData.append('file', filePart);
+
+    console.log('[DOC UPLOAD] Starting upload', {
+      deliveryPersonId,
+      documentType,
+      hasDocumentNumber: Boolean(documentNumber),
+      fileUri,
+      fileName: filePart.name,
+      hasJwtToken: Boolean(jwtToken),
     });
-    return res.data;
+
+    try {
+      // Pass JWT via config.headers — the request interceptor strips Content-Type
+      // so React Native sets the correct multipart boundary automatically.
+      const res = await apiClient.post(uploadUrl, formData, {
+        headers: jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {},
+        timeout: 120000, // 2 min for large document images
+      });
+
+      console.log('[DOC UPLOAD] Upload success', {
+        deliveryPersonId,
+        documentType,
+        status: res.status,
+        documentId: res.data?.document?.id,
+        backendMessage: res.data?.message,
+      });
+
+      return res.data;
+    } catch (error: any) {
+      console.warn('[DOC UPLOAD] Upload failed', {
+        deliveryPersonId,
+        documentType,
+        message: error?.message,
+        status: error?.response?.status,
+        response: error?.response?.data,
+        url: `${error?.config?.baseURL || ''}${error?.config?.url || uploadUrl}`,
+      });
+      throw error;
+    }
   },
 
   /** GET /api/documents/validation-rules — Get document validation rules */

@@ -408,12 +408,17 @@ export default function RegisterScreen() {
         [{ text: 'Continue', onPress: () => router.replace('/verification') }],
       );
     } catch (error: any) {
-      Alert.alert(
-        'Submission failed',
+      const isNetworkError = error?.message === 'Network Error';
+      const serverMsg =
         error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          'We could not complete signup right now.',
+        error?.response?.data?.message ||
+        null;
+
+      Alert.alert(
+        isNetworkError ? 'Connection failed' : 'Submission failed',
+        isNetworkError
+          ? 'Could not reach the server. Please check your internet connection and try again.'
+          : serverMsg || error?.message || 'We could not complete signup right now.',
       );
     } finally {
       setSubmitting(false);
