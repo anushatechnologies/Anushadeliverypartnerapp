@@ -5,11 +5,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Application from 'expo-application';
 
 export default function AboutScreen() {
   const router = useRouter();
-  const appVersion = "2.4.0";
-  const buildNumber = "56";
+  const appVersion = Application.nativeApplicationVersion ?? "2.4.8";
+  const buildNumber = Application.nativeBuildVersion ?? "86";
 
   return (
     <View style={styles.container}>

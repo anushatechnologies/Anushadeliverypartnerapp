@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
+  FlatList,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -31,10 +32,13 @@ import CustomTouchableOpacity from "../../components/CustomTouchableOpacity";
 import PremiumPopup, { PopupType } from "../../components/PremiumPopup";
 import { orderService } from "../../services/orderService";
 import { profileService } from "../../services/profileService";
+import { bankService, type BankOption } from "../../services/bankService";
 
 const { width } = Dimensions.get("window");
 
 export default function Profile() {
+  const supportNumber = "6309981555";
+  const lockedWhatsappUrl = `https://wa.me/91${supportNumber}?text=Hi%2C%20I%20need%20help%20updating%20locked%20details%20in%20Anusha%20Bazaar%20Delivery%20Partner%20app`;
   const router = useRouter();
   const { authState, logout, updateProfile } = useUser();
   const { language, setLanguage, t } = useLanguage();
@@ -43,6 +47,7 @@ export default function Profile() {
   const [bankModal, setBankModal] = useState(false);
   const [langModal, setLangModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showLockedSupport, setShowLockedSupport] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [profileStats, setProfileStats] = useState({ totalTrips: 0, rating: "--" });
@@ -58,9 +63,14 @@ export default function Profile() {
   const user = authState.user;
   const isApproved = authState.verificationStatus === 'approved';
 
+  const openLockedSupport = () => {
+    setShowLockedSupport(true);
+  };
+
   const handleUpdateAvatar = async () => {
      if (isApproved) {
-        return Alert.alert("Locked Profile", "Your profile photo is verified and cannot be changed. Contact support if you need assistance.");
+        openLockedSupport();
+        return;
      }
      Alert.alert(
        "Update Profile Photo",
@@ -208,10 +218,11 @@ export default function Profile() {
           </View>
 
           {isApproved && (
-            <View style={styles.lockedBanner}>
+            <TouchableOpacity style={styles.lockedBanner} activeOpacity={0.9} onPress={openLockedSupport}>
               <MaterialCommunityIcons name="lock-check-outline" size={16} color="#166534" />
               <Text style={styles.lockedBannerText}>Account approved — personal, vehicle and bank details are locked. Contact support to modify.</Text>
-            </View>
+              <MaterialCommunityIcons name="chevron-right" size={18} color="#166534" />
+            </TouchableOpacity>
           )}
 
           <View style={styles.menuGroupCard}>
@@ -220,7 +231,7 @@ export default function Profile() {
                label="Personal Details"
                locked={isApproved}
                onPress={() => isApproved
-                 ? Alert.alert('Locked', 'Personal details are locked after admin approval. Contact support to make changes.')
+                 ? openLockedSupport()
                  : setPersonalModal(true)
                }
              />
@@ -230,19 +241,18 @@ export default function Profile() {
                label="Vehicle Information"
                locked={isApproved}
                onPress={() => isApproved
-                 ? Alert.alert('Locked', 'Vehicle details are locked after admin approval. Contact support to make changes.')
+                 ? openLockedSupport()
                  : setVehicleModal(true)
                }
                value={user?.vehicleModel ? `${user.vehicleType} (${user.vehicleModel})` : user?.vehicleType}
              />
-             <View style={styles.menuDividerLine} />
              <View style={styles.menuDividerLine} />
              <MenuAction
                icon="bank-outline"
                label="Bank Details"
                locked={isApproved}
                onPress={() => isApproved
-                 ? Alert.alert('Locked', 'Bank details are locked after admin approval. Contact support to make changes.')
+                 ? openLockedSupport()
                  : setBankModal(true)
                }
                value={user?.bankName || undefined}
@@ -367,16 +377,16 @@ export default function Profile() {
                  <SupportTile 
                    icon="phone-in-talk" 
                    label="Call Support" 
-                   desc="Call: 6309981555" 
+                   desc={`Call: ${supportNumber}`} 
                    color="#0A6A4C" 
-                   onPress={() => Linking.openURL('tel:6309981555')} 
+                   onPress={() => Linking.openURL(`tel:${supportNumber}`)} 
                  />
                  <SupportTile 
                    icon="whatsapp" 
                    label="Chat with Us" 
-                   desc="WhatsApp: 6309981555" 
+                   desc={`WhatsApp: ${supportNumber}`} 
                    color="#25D366" 
-                   onPress={() => Linking.openURL('https://wa.me/916309981555?text=Hi%2C%20I%20need%20help%20with%20Anusha%20Bazaar%20Delivery%20Partner%20app')} 
+                   onPress={() => Linking.openURL(`https://wa.me/91${supportNumber}?text=Hi%2C%20I%20need%20help%20with%20Anusha%20Bazaar%20Delivery%20Partner%20app`)} 
                  />
                  <SupportTile 
                    icon="frequently-asked-questions" 
@@ -391,6 +401,34 @@ export default function Profile() {
                  <Text style={styles.modalActionBtnTextSecondary}>Close</Text>
               </TouchableOpacity>
            </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal visible={showLockedSupport} transparent animationType="fade">
+        <View style={styles.modalOverlayCenteredAlpha}>
+          <Animated.View entering={FadeInDown} style={styles.lockedSupportBox}>
+            <View style={styles.lockedSupportIcon}>
+              <MaterialCommunityIcons name="lock-check-outline" size={28} color="#166534" />
+            </View>
+            <Text style={styles.lockedSupportTitle}>Contact Admin</Text>
+            <Text style={styles.lockedSupportSubtitle}>
+              Approved profiles are locked in the app. To update personal, vehicle, bank, or photo details, contact admin directly.
+            </Text>
+
+            <TouchableOpacity style={styles.lockedSupportPrimary} onPress={() => Linking.openURL(`tel:${supportNumber}`)}>
+              <MaterialCommunityIcons name="phone" size={20} color="#FFFFFF" />
+              <Text style={styles.lockedSupportPrimaryText}>Call Admin</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.lockedSupportSecondary} onPress={() => Linking.openURL(lockedWhatsappUrl)}>
+              <MaterialCommunityIcons name="whatsapp" size={20} color="#25D366" />
+              <Text style={styles.lockedSupportSecondaryText}>Chat on WhatsApp</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.lockedSupportClose} onPress={() => setShowLockedSupport(false)}>
+              <Text style={styles.lockedSupportCloseText}>Close</Text>
+            </TouchableOpacity>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -634,12 +672,72 @@ function BankDetailsModal({ visible, onClose, initialAccountName, initialAccount
   const [bankName, setBankName] = useState(initialBankName || "");
   const [ifscCode, setIfscCode] = useState(initialIfscCode || "");
   const [loading, setLoading] = useState(false);
+  const [bankSearchQuery, setBankSearchQuery] = useState(initialBankName || "");
+  const [bankSelected, setBankSelected] = useState(Boolean(initialBankName));
+  const [bankOptions, setBankOptions] = useState<BankOption[]>([]);
+  const [bankSearching, setBankSearching] = useState(false);
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+  const bankSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setAccountName(initialAccountName || "");
+    setAccountNumber(initialAccountNumber || "");
+    setConfirmAccountNumber(initialAccountNumber || "");
+    setBankName(initialBankName || "");
+    setBankSearchQuery(initialBankName || "");
+    setIfscCode(initialIfscCode || "");
+    setBankSelected(Boolean(initialBankName));
+    setBankOptions([]);
+    setBankDropdownOpen(false);
+  }, [initialAccountName, initialAccountNumber, initialBankName, initialIfscCode, visible]);
+
+  useEffect(() => () => {
+    if (bankSearchTimer.current) clearTimeout(bankSearchTimer.current);
+  }, []);
+
+  const searchBanks = (query: string, preserveSelection = false) => {
+    setBankSearchQuery(query);
+    setBankDropdownOpen(true);
+    if (!preserveSelection) {
+      setBankSelected(false);
+      setBankName("");
+    }
+    if (bankSearchTimer.current) clearTimeout(bankSearchTimer.current);
+    setBankSearching(true);
+    bankSearchTimer.current = setTimeout(async () => {
+      try {
+        const results = await bankService.search(query);
+        setBankOptions(results);
+      } catch {
+        setBankOptions([]);
+      } finally {
+        setBankSearching(false);
+      }
+    }, 250);
+  };
+
+  const loadPopularBanks = () => {
+    setBankDropdownOpen(true);
+    if (bankOptions.length > 0) return;
+    searchBanks('', true);
+  };
+
+  const selectBank = (bank: BankOption) => {
+    setBankName(bank.name);
+    setBankSearchQuery(bank.name);
+    setBankSelected(true);
+    setBankDropdownOpen(false);
+    setBankOptions([]);
+    if (!ifscCode.trim() && bank.ifscPrefix) {
+      setIfscCode(`${bank.ifscPrefix}0`);
+    }
+  };
 
   const handleSave = async () => {
     if (!accountName.trim()) return Alert.alert("Required", "Please enter the account holder name.");
     if (!accountNumber.trim() || accountNumber.length < 9) return Alert.alert("Invalid", "Account number must be at least 9 digits.");
     if (accountNumber !== confirmAccountNumber) return Alert.alert("Mismatch", "Account numbers do not match. Please re-enter.");
-    if (!bankName.trim()) return Alert.alert("Required", "Please enter the bank name.");
+    if (!bankSelected || !bankName.trim()) return Alert.alert("Required", "Select your bank from the dropdown list.");
     const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
     if (!ifscRegex.test(ifscCode.toUpperCase())) return Alert.alert("Invalid IFSC", "IFSC code format should be like SBIN0001234.");
 
@@ -685,14 +783,52 @@ function BankDetailsModal({ visible, onClose, initialAccountName, initialAccount
             />
 
             <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>BANK NAME</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. State Bank of India"
-              placeholderTextColor="#94A3B8"
-              value={bankName}
-              onChangeText={setBankName}
-              autoCapitalize="words"
-            />
+            <View>
+              <View style={styles.modalSearchField}>
+                <MaterialCommunityIcons name="magnify" size={20} color="#0E8A63" />
+                <TextInput
+                  style={styles.modalSearchInput}
+                  placeholder="Search your bank (e.g. State Bank)"
+                  placeholderTextColor="#94A3B8"
+                  value={bankSearchQuery}
+                  onChangeText={(value) => searchBanks(value)}
+                  onFocus={loadPopularBanks}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+                {bankSearching ? (
+                  <ActivityIndicator size="small" color="#0E8A63" />
+                ) : bankSelected ? (
+                  <MaterialCommunityIcons name="check-circle" size={18} color="#16A34A" />
+                ) : null}
+              </View>
+              <Text style={styles.modalHelperText}>
+                {bankSelected
+                  ? "Bank selected from the approved list."
+                  : "Choose your bank from the dropdown list to auto-suggest the IFSC prefix."}
+              </Text>
+              {bankDropdownOpen && bankOptions.length > 0 ? (
+                <View style={styles.modalBankDropdown}>
+                  <FlatList
+                    data={bankOptions}
+                    keyExtractor={(item) => String(item.id)}
+                    keyboardShouldPersistTaps="handled"
+                    scrollEnabled={false}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity style={styles.modalBankDropdownItem} onPress={() => selectBank(item)}>
+                        <MaterialCommunityIcons name="bank" size={18} color="#0E8A63" />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.modalBankDropdownName}>{item.name}</Text>
+                          <Text style={styles.modalBankDropdownCode}>{item.ifscPrefix} · {item.shortCode}</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={16} color="#94A3B8" />
+                      </TouchableOpacity>
+                    )}
+                    ItemSeparatorComponent={() => <View style={styles.modalBankDivider} />}
+                  />
+                </View>
+              ) : null}
+            </View>
 
             <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>ACCOUNT NUMBER</Text>
             <TextInput
@@ -832,6 +968,16 @@ const styles = StyleSheet.create({
   modalActionBtnTextSecondary: { color: '#475569', fontSize: 16, fontWeight: '800' },
 
   modalOverlayCenteredAlpha: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 28 },
+  lockedSupportBox: { backgroundColor: '#FFFFFF', borderRadius: 32, padding: 28, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 12 },
+  lockedSupportIcon: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center', marginBottom: 18, alignSelf: 'center' },
+  lockedSupportTitle: { color: '#0F172A', fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  lockedSupportSubtitle: { color: '#64748B', fontSize: 14, fontWeight: '600', lineHeight: 22, textAlign: 'center', marginTop: 10, marginBottom: 22 },
+  lockedSupportPrimary: { height: 58, borderRadius: 18, backgroundColor: '#0E8A63', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
+  lockedSupportPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
+  lockedSupportSecondary: { height: 58, borderRadius: 18, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
+  lockedSupportSecondaryText: { color: '#166534', fontSize: 16, fontWeight: '900' },
+  lockedSupportClose: { height: 54, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  lockedSupportCloseText: { color: '#475569', fontSize: 15, fontWeight: '800' },
   logoutConfirmationBox: { backgroundColor: '#FFFFFF', borderRadius: 36, padding: 32, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 12 },
   logoutIconBadge: { width: 72, height: 72, borderRadius: 24, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#FEE2E2' },
   logoutModalTitle: { color: '#0F172A', fontSize: 24, fontWeight: '900', letterSpacing: -0.5, marginBottom: 12 },
@@ -852,6 +998,60 @@ const styles = StyleSheet.create({
 
   inputLabelMicro: { fontSize: 11, fontWeight: '800', color: '#64748B', letterSpacing: 1, marginBottom: 8 },
   modalInput: { backgroundColor: '#F8FAFC', paddingHorizontal: 16, height: 56, borderRadius: 16, fontSize: 16, fontWeight: '700', color: '#1E293B', borderWidth: 1, borderColor: '#E2E8F0' },
+  modalSearchField: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minHeight: 56,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalSearchInput: {
+    flex: 1,
+    height: 56,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  modalHelperText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  modalBankDropdown: {
+    marginTop: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#DDEEE7',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  modalBankDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  modalBankDropdownName: {
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  modalBankDropdownCode: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  modalBankDivider: {
+    height: 1,
+    backgroundColor: '#EEF5EC',
+  },
   vehicleChipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   vChip: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
   vChipActive: { backgroundColor: '#F0FDF4', borderColor: '#0E8A63' },

@@ -1,0 +1,1107 @@
+ANUSHA DELIVERY PARTNER APP
+CLEAN IMPLEMENTATION DOCUMENT
+
+Prepared from current codebase:
+- app/, features/, services/, context/
+- Backend delivery APIs already available in Backend_Original
+
+
+1. MAIN GOAL
+
+Build the delivery partner app in one clean flow:
+- secure login/signup
+- profile + KYC onboarding
+- approval waiting flow
+- go online / go offline
+- receive delivery orders
+- accept / reject / pickup / deliver
+- live location sync
+- earnings and payouts
+- profile, bank details, support, notifications
+
+This document is based on the current project code, not a generic sample.
+
+
+2. CURRENT PROJECT BASE ALREADY READY
+
+The following parts are already present and should be kept:
+
+- Auth screens
+  - features/auth/screens/LoginScreen.tsx
+  - features/auth/screens/OtpScreen.tsx
+  - features/auth/screens/RegisterScreen.tsx
+  - features/auth/screens/VerificationScreen.tsx
+
+- KYC screen
+  - features/partner/screens/KycScreen.tsx
+
+- Main app tabs
+  - app/(tabs)/index.tsx
+  - app/(tabs)/orders.tsx
+  - app/(tabs)/earnings.tsx
+  - app/(tabs)/location.tsx
+  - app/(tabs)/profile.tsx
+
+- Service layer
+  - services/apiClient.ts
+  - services/authService.ts
+  - services/onboardingService.ts
+  - services/profileService.ts
+  - services/orderService.ts
+  - services/documentService.ts
+  - services/payoutService.ts
+
+- App session state
+  - context/UserContext.tsx
+
+
+3. CLEAN APP STRUCTURE TO KEEP
+
+3.1 Auth Flow
+
+- Login
+- OTP verification
+- Register partner
+- Verification waiting screen
+
+3.2 App Flow
+
+- Home
+- Orders
+- Location
+- Earnings
+- Profile
+
+3.3 Support Pages
+
+- Notifications
+- Help
+- Terms
+- About
+
+
+4. CLEAN ICON PLAN
+
+Use MaterialCommunityIcons consistently.
+
+Main tabs:
+- Home: home / home-outline
+- Earnings: wallet / wallet-outline
+- Location: map-marker-radius
+- Orders: clipboard-text / clipboard-text-outline
+- Account: account / account-outline
+
+Auth flow:
+- Login: phone-outline
+- OTP: shield-check-outline
+- Register: account-plus-outline
+- Verification waiting: progress-clock
+
+KYC and profile:
+- Profile photo: camera-outline
+- Aadhaar: card-account-details-outline
+- PAN: card-bulleted-outline
+- Driving license: card-account-phone-outline
+- RC book: card-text-outline
+- Insurance: shield-car-outline
+- Vehicle: bike-fast or motorcycle
+- Bank details: bank-outline
+
+Order lifecycle:
+- New order: bell-ring-outline
+- Pickup store: storefront-outline
+- Reached store: map-marker-check-outline
+- Pickup OTP: key-outline
+- Picked up: package-variant-closed-check
+- Out for delivery: bike-fast
+- Delivered: check-decagram
+- Rejected: close-octagon-outline
+- Cancelled: cancel
+
+Support:
+- Notifications: bell-ring-outline
+- Help: help-circle-outline
+- WhatsApp support: whatsapp
+- Call support: phone-in-talk
+
+
+4.1 SCREEN-WISE ICON MAP
+
+Use these exact icon names in UI:
+
+Splash / entry:
+- App logo badge: lightning-bolt
+
+Login screen:
+- phone input: phone-outline
+- send OTP button: arrow-right
+- existing partner badge: shield-check-outline
+
+OTP screen:
+- verification title: shield-check-outline
+- verify button: check-circle-outline
+- resend link helper: refresh
+
+Register screen:
+- partner signup title: account-plus-outline
+- first name: account-outline
+- last name: badge-account-horizontal-outline
+- vehicle model: bike-fast
+- registration number: card-text-outline
+
+Verification waiting screen:
+- pending: progress-clock
+- approved: check-decagram
+- rejected: alert-circle-outline
+- refresh status: refresh
+- logout: logout
+
+KYC screen:
+- Aadhaar: card-account-details-outline
+- PAN: card-bulleted-outline
+- Driving License: card-account-phone-outline
+- RC Book: card-text-outline
+- Insurance: shield-car-outline
+- upload button: cloud-upload-outline
+- camera capture: camera-outline
+
+Home screen:
+- online toggle: power
+- notifications: bell-ring-outline
+- support: face-agent
+- earnings quick action: wallet-outline
+- orders quick action: clipboard-text-outline
+- refer/support action: account-multiple-plus-outline or help-circle-outline
+- available order badge: lightning-bolt
+- pickup store: storefront
+- customer location: map-marker-radius
+
+Orders screen:
+- active tab: clipboard-text
+- completed tab: check-decagram
+- navigate to map: map-marker-path
+- pickup OTP: key-outline
+- delivery proof photo: camera
+- cash payment: cash
+- online payment: qrcode-scan
+- delivered success: check-bold
+
+Location screen:
+- center tab button: map-marker-radius
+- rider marker: bike-fast
+- store marker: storefront
+- customer marker: home-map-marker
+- hotspot / demand: fire
+
+Earnings screen:
+- wallet: wallet-outline
+- payout settlement: bank-transfer
+- history: history
+- success payout: check-circle
+
+Profile screen:
+- account: account-outline
+- personal details: account-details-outline
+- vehicle info: car-info
+- KYC status: shield-check-outline
+- language: translate
+- help: help-circle-outline
+- terms: file-document-outline
+- about: information-outline
+- logout: logout-variant
+
+
+4.2 TAB BAR FLOW WITH ICONS
+
+Bottom tabs should stay like this:
+
+- Home
+  - icon: home / home-outline
+- Earnings
+  - icon: wallet / wallet-outline
+- Location
+  - center floating icon: map-marker-radius
+- Tasks
+  - icon: clipboard-text / clipboard-text-outline
+- Account
+  - icon: account / account-outline
+
+
+5. BASE URL AND AUTH RULE
+
+Backend base URL:
+- production: https://api.anushatechnologies.com
+- local example: http://localhost:9000
+
+JWT header:
+- Authorization: Bearer <jwtToken>
+
+Important backend note:
+- There is no dedicated refresh-token API for delivery app users
+- only admin has refresh endpoint
+- for delivery app, when JWT expires, app should:
+  1. get fresh Firebase ID token
+  2. call POST /api/delivery/auth/login again
+  3. save new JWT
+  4. continue app session
+
+
+6. CLEAN END-TO-END FLOW
+
+6.0 SIMPLE APP NAVIGATION FLOW
+
+Open app
+-> check saved JWT
+-> if no JWT -> Login
+-> if JWT exists -> GET /api/delivery-app/status
+-> if approved -> Home Tabs
+-> if pending/rejected -> Verification screen
+
+New partner flow:
+Login/Register entry
+-> Register
+-> OTP
+-> Personal details
+-> Vehicle details
+-> Documents upload
+-> Verification waiting
+-> Approved by admin
+-> Home Tabs
+
+Existing partner flow:
+Login
+-> OTP
+-> Backend login
+-> status check
+-> Approved -> Home Tabs
+-> Pending -> Verification screen
+
+Daily delivery flow:
+Home
+-> Go Online
+-> Available order popup/list
+-> Accept Order
+-> Orders screen
+-> Arrived at Store
+-> Pickup OTP verify
+-> Start live location
+-> Deliver order
+-> Completed orders
+-> Earnings updated
+
+6.1 Existing Delivery Partner Login Flow
+
+Step 1:
+- open Login screen
+- enter 10-digit phone number
+- call GET /api/delivery/auth/check-phone/{phone}
+
+Step 2:
+- if exists = true, send Firebase OTP
+- move to OTP screen
+
+Step 3:
+- verify OTP in Firebase
+- get Firebase ID token
+
+Step 4:
+- call POST /api/delivery/auth/login
+- body:
+  {
+    "firebaseIdToken": "<firebase-id-token>",
+    "fcmToken": "<device-fcm-token>"
+  }
+
+Step 5:
+- save jwtToken in AsyncStorage
+- call GET /api/delivery-app/status
+
+Step 6 route decision:
+- if approvalStatus = APPROVED -> go to /(tabs)
+- if approvalStatus = PENDING or REJECTED -> go to /verification
+
+
+6.2 New Delivery Partner Signup Flow
+
+Step 1:
+- enter phone number in register flow
+- call GET /api/delivery/auth/check-phone/{phone}
+
+Step 2:
+- if not exists, send Firebase OTP
+- verify OTP
+- get Firebase ID token
+
+Step 3:
+- collect:
+  - firstName
+  - lastName
+  - vehicleType
+  - vehicleModel
+  - registrationNumber
+  - profile photo
+
+Step 4:
+- upload profile photo first
+- call POST /api/delivery/auth/upload-profile-photo
+- multipart:
+  - file
+
+Step 5:
+- call POST /api/delivery/auth/signup
+- body:
+  {
+    "firebaseIdToken": "<firebase-id-token>",
+    "firstName": "Ravi",
+    "lastName": "Kumar",
+    "vehicleType": "BIKE",
+    "vehicleModel": "Honda Shine",
+    "registrationNumber": "TS09AB1234",
+    "profilePhotoUrl": "<uploaded-photo-url>",
+    "fcmToken": "<device-fcm-token>"
+  }
+
+Step 6:
+- save jwtToken
+- save deliveryPersonId
+
+Step 7:
+- upload required KYC documents one by one
+- call POST /api/documents/upload
+
+Step 8:
+- route to /verification
+- keep checking GET /api/delivery-app/status
+
+Step 9:
+- when admin approves -> go to /(tabs)
+
+
+6.3 Daily Partner App Flow
+
+Step 1:
+- open app
+- if jwt exists, call GET /api/delivery-app/status
+
+Step 2:
+- if valid token and user exists -> restore user session
+- if 401 -> re-login using Firebase ID token
+
+Step 3:
+- home screen shows:
+  - online/offline status
+  - total earnings
+  - active orders count
+  - available orders badge
+
+Step 4:
+- rider goes online
+- call PUT /api/delivery-app/online-status
+
+Step 5:
+- app polls available order list
+- call GET /api/delivery-app/available-orders
+
+Step 6:
+- rider accepts or rejects order
+
+Step 7:
+- accepted order goes to Orders screen
+
+Step 8:
+- rider reaches store
+- verifies pickup OTP
+- starts live location updates
+- delivers order
+
+Step 9:
+- order moves to completed
+- earnings and payouts update
+
+
+7. CLEAN DELIVERY ORDER FLOW
+
+Use this exact app behavior:
+
+7.1 Online / Available Orders
+
+When rider is online:
+- poll GET /api/delivery-app/available-orders every 10 to 15 seconds
+
+Available order card should show:
+- order number
+- store name
+- pickup address
+- customer name
+- delivery address
+- order amount
+- delivery fee / estimated earning
+- payment type
+- distance
+
+Buttons:
+- Accept
+- Reject
+
+
+7.2 Accept Order
+
+Recommended app endpoint:
+- POST /api/delivery-app/orders/{orderId}/accept
+
+Why:
+- backend automatically picks current delivery person from JWT
+- cleaner than always sending deliveryPersonId
+
+After accept:
+- refresh active orders
+- route to Orders tab
+
+
+7.3 Reject Order
+
+Use:
+- POST /api/delivery-orders/{orderNumber}/reject
+
+Body:
+{
+  "deliveryPersonId": 5,
+  "reason": "Too far"
+}
+
+Keep reject reasons list:
+- Vehicle Breakdown
+- Out of Fuel
+- Too Far
+- Personal Emergency
+- Other
+
+
+7.4 Arrived At Store
+
+Use:
+- POST /api/delivery-app/orders/{orderNumber}/arrived
+
+No body required.
+
+Show status badge:
+- Reached Store
+
+
+7.5 Pickup Verification
+
+Use:
+- POST /api/delivery-app/orders/{orderNumber}/picked-up
+
+Body:
+{
+  "otp": "1234"
+}
+
+This should:
+- validate store pickup OTP
+- move order to picked-up state
+
+
+7.6 Live Location Updates
+
+Use:
+- POST /api/delivery-orders/{orderNumber}/update-location
+
+Body:
+{
+  "deliveryPersonId": 5,
+  "lat": 17.4401,
+  "lng": 78.3812
+}
+
+Recommended behavior:
+- start only for active accepted order
+- send every 10 to 15 seconds
+- stop when delivered or cancelled
+
+
+7.7 Delivery Completion
+
+Use:
+- POST /api/delivery-app/orders/{orderNumber}/delivered
+
+No body required in current backend controller.
+
+Important:
+- current screen should not use fake OTP values
+- current screen should not use hardcoded pickup or delivery markers
+
+
+7.8 Order List APIs
+
+Use these for Orders tab:
+
+- GET /api/delivery-orders/delivery-person/{deliveryPersonId}/active
+- GET /api/delivery-orders/delivery-person/{deliveryPersonId}/completed
+- GET /api/delivery-orders/delivery-person/{deliveryPersonId}/recent?limit=10
+- GET /api/delivery-orders/delivery-person/{deliveryPersonId}/statistics
+- GET /api/delivery-orders/number/{orderNumber}
+
+
+8. CLEAN SCREEN-BY-SCREEN IMPLEMENTATION
+
+8.0 SCREEN FLOW ORDER
+
+Use this route order in app:
+
+- /login
+- /otp
+- /register
+- /verification
+- /(tabs)/index
+- /(tabs)/orders
+- /(tabs)/location
+- /(tabs)/earnings
+- /(tabs)/profile
+- /notifications
+- /help
+- /about
+- /terms
+
+Screen movement:
+
+- Login -> OTP
+- OTP(login) -> Tabs or Verification
+- OTP(register) -> Register
+- Register -> Verification
+- Verification -> Tabs after approval
+- Home -> Orders
+- Home -> Earnings
+- Home -> Location
+- Profile -> KYC
+- Profile -> Help / Terms / About
+
+8.1 app/_layout.tsx
+
+Keep route guard logic:
+- if not logged in -> /login
+- if logged in and approved -> /(tabs)
+- if logged in and pending/rejected -> /verification
+
+Improve:
+- use authState.isLoading properly
+- avoid duplicate redirects
+
+
+8.2 context/UserContext.tsx
+
+This must become the single source of truth.
+
+Store:
+- jwt token
+- deliveryPersonId
+- phone
+- name
+- vehicle type/model
+- registration number
+- profile photo
+- approval status
+- online status
+
+Must do:
+- restore session on app launch
+- fetch GET /api/delivery-app/status
+- update cache
+- if 401, clear only after retry login fails
+
+
+8.3 LoginScreen.tsx
+
+Keep:
+- phone input
+- check phone
+- Firebase OTP
+
+Do:
+- only allow registered partner numbers
+- move cleanly to OTP screen
+
+
+8.4 OtpScreen.tsx
+
+Keep:
+- Firebase verify
+- backend login/signup decision
+
+Do:
+- on login success save JWT
+- update UserContext
+- route based on approval status
+- on 6 digits auto submit
+
+
+8.5 RegisterScreen.tsx
+
+Keep 4-step flow:
+- Verify mobile
+- Personal info
+- Vehicle setup
+- Documents
+
+Do:
+- keep this as primary onboarding screen
+- do not move KYC to many small screens
+- use strong validation before upload
+
+
+8.6 VerificationScreen.tsx
+
+Show:
+- approval status
+- documents uploaded status
+- approved docs count
+- ready for final approval
+- profile photo remarks if rejected
+
+Buttons:
+- Refresh status
+- Capture new selfie if photo rejected
+- Logout
+
+
+8.7 Home Screen
+
+Home screen should become the live operations dashboard.
+
+Show:
+- online/offline toggle
+- today earnings
+- completed orders
+- active orders
+- available order modal
+- quick actions:
+  - Orders
+  - Earnings
+  - Location
+  - Help
+
+Remove from current code:
+- placeholder vendor and customer text
+- fake order popups generated from wrong source
+- mock payout hints
+
+Use:
+- GET /api/delivery-app/dashboard
+- GET /api/delivery-app/status
+- GET /api/delivery-app/available-orders
+- PUT /api/delivery-app/online-status
+
+
+8.8 Orders Screen
+
+Split visually into:
+- Active
+- Completed
+
+Active card must show:
+- order number
+- pickup store
+- customer address
+- payment type
+- earning
+- current status
+
+Action buttons by state:
+- accepted but not reached -> Arrived at Store
+- reached -> Enter Pickup OTP
+- picked up -> Navigate to Customer
+- out for delivery -> Mark Delivered
+
+Remove from current code:
+- hardcoded OTP "1111" and "1234"
+- static map coordinates
+- fake item data
+- fake payment confirm flow not supported by backend
+
+
+8.9 Location Screen
+
+This should become live rider map, not static demo map.
+
+Show:
+- current rider marker
+- pickup marker
+- customer marker
+- route line if available later
+- current place name
+- online status
+
+Use:
+- device GPS
+- active order address and coordinates when available
+- location sync API for active order
+
+
+8.10 Earnings Screen
+
+Keep it read-only until payout request API exists.
+
+Show:
+- total paid
+- recent payouts
+- settlement history
+- payout statuses:
+  - PENDING
+  - PROCESSED
+  - FAILED
+  - CANCELLED
+
+Use:
+- GET /api/delivery-app/payouts
+- GET /api/payouts/delivery-person/{deliveryPersonId}/recent
+- GET /api/payouts/delivery-person/{deliveryPersonId}/total-paid
+
+Remove:
+- fake withdrawal success modal
+- fake settlement simulation
+
+
+8.11 Profile Screen
+
+Profile screen must include:
+- profile photo
+- first name / last name
+- phone
+- vehicle details
+- KYC status
+- bank details
+- help
+- terms
+- about
+- logout
+
+Use:
+- GET /api/delivery-app/status
+- PUT /api/delivery-app/profile
+- POST /api/delivery-app/profile-photo
+- PUT /api/delivery-app/vehicle
+- PUT /api/delivery-app/bank-details
+
+
+9. DOCUMENT / KYC IMPLEMENTATION
+
+9.1 Required Documents
+
+Required:
+- Profile Photo
+- Aadhaar Front
+- Aadhaar Back
+- PAN Card
+- Driving License
+- RC Book
+
+Optional:
+- Insurance
+
+
+9.2 Backend Document Types
+
+Use these exact backend values:
+- AADHAAR_FRONT
+- AADHAAR_BACK
+- PAN_CARD
+- DRIVING_LICENSE
+- RC_BOOK
+- INSURANCE
+
+
+9.3 Validation Rules
+
+Use GET /api/documents/validation-rules to show help text.
+
+Local validation to keep in app:
+- Aadhaar: 12 digits
+- PAN: ABCDE1234F
+- Driving License: valid alphanumeric
+- RC number: valid vehicle registration format
+- Insurance: optional, if file uploaded then number required
+
+
+9.4 Document Upload API
+
+POST /api/documents/upload
+
+multipart/form-data:
+- deliveryPersonId
+- documentType
+- documentNumber
+- file
+
+Example:
+- deliveryPersonId: 5
+- documentType: PAN_CARD
+- documentNumber: ABCDE1234F
+- file: <image>
+
+
+9.5 Document Status Handling In App
+
+Each document should show one status chip:
+- NOT_UPLOADED
+- PENDING
+- APPROVED
+- REJECTED
+- NEEDS_REUPLOAD
+
+Rule:
+- APPROVED -> locked
+- PENDING -> locked
+- REJECTED or NEEDS_REUPLOAD -> allow reupload
+
+
+9.6 Important Backend Note
+
+Current backend placeholder endpoints:
+- GET /api/documents/{documentId}
+- DELETE /api/documents/{documentId}
+
+These are not fully implemented yet.
+
+So in app:
+- do not depend heavily on delete flow
+- primary flow should be upload and reupload
+- status should come from GET /api/delivery-app/status
+
+
+10. DELIVERY APP API LIST TO IMPLEMENT IN APP
+
+10.1 Auth APIs
+
+GET /api/delivery/auth/check-phone/{phoneNumber}
+POST /api/delivery/auth/upload-profile-photo
+POST /api/delivery/auth/signup
+POST /api/delivery/auth/login
+POST /api/save-token
+
+
+10.2 Profile / Status APIs
+
+GET /api/delivery-app/status
+PUT /api/delivery-app/online-status
+PUT /api/delivery-app/profile
+POST /api/delivery-app/profile-photo
+GET /api/delivery-app/dashboard
+PUT /api/delivery-app/vehicle
+PUT /api/delivery-app/bank-details
+GET /api/delivery-app/payouts
+
+
+10.3 Order Operation APIs
+
+GET /api/delivery-app/available-orders
+POST /api/delivery-app/orders/{orderId}/accept
+POST /api/delivery-app/orders/{orderNumber}/arrived
+POST /api/delivery-app/orders/{orderNumber}/picked-up
+POST /api/delivery-app/orders/{orderNumber}/delivered
+
+
+10.4 Order List / Tracking APIs
+
+GET /api/delivery-orders/delivery-person/{deliveryPersonId}
+GET /api/delivery-orders/delivery-person/{deliveryPersonId}/active
+GET /api/delivery-orders/delivery-person/{deliveryPersonId}/completed
+GET /api/delivery-orders/delivery-person/{deliveryPersonId}/recent?limit=10
+GET /api/delivery-orders/delivery-person/{deliveryPersonId}/statistics
+GET /api/delivery-orders/{id}
+GET /api/delivery-orders/number/{orderNumber}
+POST /api/delivery-orders/{orderNumber}/reject
+POST /api/delivery-orders/{orderNumber}/update-location
+POST /api/delivery-orders/{orderId}/cancel
+
+
+10.5 KYC APIs
+
+POST /api/documents/upload
+GET /api/documents/validation-rules
+
+
+10.6 Payout APIs
+
+GET /api/delivery-app/payouts
+GET /api/payouts/delivery-person/{deliveryPersonId}
+GET /api/payouts/delivery-person/{deliveryPersonId}/recent?limit=5
+GET /api/payouts/delivery-person/{deliveryPersonId}/total-paid
+
+
+11. CLEAN TECHNICAL IMPLEMENTATION RULES
+
+11.1 Use JWT-based endpoints first
+
+Preferred for app:
+- /api/delivery-app/*
+
+Use id-based endpoints only when needed for:
+- statistics
+- active/completed list
+- fallback lookups
+
+
+11.2 One Notification System Only
+
+Current app mixes:
+- Firebase messaging
+- Expo notification token style
+
+Clean plan:
+- use Firebase FCM only
+- save FCM token using POST /api/save-token
+- remove Expo push token dependency for delivery app production flow
+
+
+11.3 One Session Recovery Strategy
+
+Do not build fake refresh token flow.
+
+On 401:
+1. try Firebase current user getIdToken(true)
+2. call POST /api/delivery/auth/login again
+3. replace old JWT
+4. retry failed request
+5. if this fails -> logout and go to login
+
+
+11.4 Remove Placeholder Data
+
+Must remove from current screens:
+- hardcoded OTP values
+- hardcoded map coordinates
+- fake payout success
+- fake order amounts
+- fake vendor/customer strings
+- fake "today earnings" numbers
+
+
+12. PHASE-WISE IMPLEMENTATION PLAN
+
+PHASE 1 - SESSION AND AUTH
+- clean apiClient.ts 401 handling
+- clean UserContext.tsx restore flow
+- keep LoginScreen and OtpScreen as real entry flow
+- route approved vs pending correctly
+
+PHASE 2 - ONBOARDING AND KYC
+- keep RegisterScreen as main onboarding
+- keep VerificationScreen as admin-wait page
+- finalize KycScreen with reupload rules
+- use validation-rules endpoint
+
+PHASE 3 - HOME DASHBOARD
+- connect dashboard endpoint
+- connect online/offline toggle
+- poll available orders
+- show proper incoming order card
+
+PHASE 4 - ORDER EXECUTION
+- clean orderService API methods
+- rebuild Orders screen with real statuses
+- connect arrived, pickup OTP, delivered
+- start/stop location sync
+
+PHASE 5 - PROFILE AND EARNINGS
+- connect profile update
+- connect profile photo update
+- connect vehicle update
+- connect bank details update
+- connect payouts and earnings history
+
+PHASE 6 - NOTIFICATIONS AND QA
+- keep Firebase token save
+- remove duplicate Expo push logic if not needed
+- test login
+- test signup
+- test KYC
+- test online/offline
+- test accept order
+- test pickup
+- test delivery
+- test rejected photo reupload
+
+
+13. FILES TO UPDATE FIRST
+
+Priority 1:
+- services/apiClient.ts
+- context/UserContext.tsx
+- services/orderService.ts
+- app/_layout.tsx
+
+Priority 2:
+- app/(tabs)/index.tsx
+- app/(tabs)/orders.tsx
+- app/(tabs)/location.tsx
+
+Priority 3:
+- app/(tabs)/profile.tsx
+- app/(tabs)/earnings.tsx
+- services/notificationService.js
+
+
+14. FINAL CLEAN APP RESULT
+
+When implemented correctly, the app flow should be:
+
+Login:
+- partner enters phone
+- OTP verify
+- app logs into backend
+
+Signup:
+- new partner verifies phone
+- fills profile
+- uploads profile photo
+- selects vehicle
+- uploads documents
+- waits for admin approval
+
+Daily usage:
+- app restores session
+- rider goes online
+- sees available orders
+- accepts order
+- reaches store
+- verifies pickup OTP
+- updates live location
+- delivers order
+- sees completed order and earnings
+
+Profile:
+- update photo if allowed
+- update name
+- update vehicle
+- update bank details
+- view KYC state
+
+Admin review support:
+- profile photo rejected -> reupload
+- document rejected -> reupload
+- approved account -> app opens main dashboard
+
+
+15. MOST IMPORTANT CURRENT FIXES FOR THIS PROJECT
+
+Fix first:
+- session recovery in services/apiClient.ts
+- single truth in context/UserContext.tsx
+- available orders source in app/(tabs)/index.tsx
+- remove fake order logic in app/(tabs)/orders.tsx
+- remove fake payout logic in app/(tabs)/earnings.tsx
+- use Firebase FCM only for token sync
+
+
+16. SHORT RECOMMENDATION
+
+Do not rewrite the whole app.
+
+Best approach:
+- keep current auth screens
+- keep current KYC screens
+- keep current service layer
+- clean the state and order execution flow
+- remove placeholder values
+- finish the real backend-connected rider journey

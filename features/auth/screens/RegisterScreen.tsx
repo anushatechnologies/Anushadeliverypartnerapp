@@ -104,6 +104,7 @@ export default function RegisterScreen() {
   const [bankOptions, setBankOptions] = useState<BankOption[]>([]);
   const [bankSearching, setBankSearching] = useState(false);
   const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+  const [bankSelected, setBankSelected] = useState(false);
   const bankSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -164,6 +165,7 @@ export default function RegisterScreen() {
 
   const bankStepComplete =
     Boolean(bankAccountName.trim()) &&
+    bankSelected &&
     Boolean(bankName.trim()) &&
     Boolean(bankAccountNumber.trim()) &&
     bankAccountNumber === bankConfirmNumber &&
@@ -177,15 +179,14 @@ export default function RegisterScreen() {
     bankStepComplete,
   ];
 
-  const searchBanks = (query: string) => {
+  const searchBanks = (query: string, preserveSelection = false) => {
     setBankSearchQuery(query);
     setBankDropdownOpen(true);
-    if (bankSearchTimer.current) clearTimeout(bankSearchTimer.current);
-    if (!query.trim()) {
-      setBankOptions([]);
-      setBankDropdownOpen(false);
-      return;
+    if (!preserveSelection) {
+      setBankSelected(false);
+      setBankName('');
     }
+    if (bankSearchTimer.current) clearTimeout(bankSearchTimer.current);
     setBankSearching(true);
     bankSearchTimer.current = setTimeout(async () => {
       try {
@@ -199,9 +200,15 @@ export default function RegisterScreen() {
     }, 350);
   };
 
+  const loadPopularBanks = () => {
+    setBankDropdownOpen(true);
+    searchBanks('', true);
+  };
+
   const selectBank = (bank: BankOption) => {
     setBankName(bank.name);
     setBankSearchQuery(bank.name);
+    setBankSelected(true);
     setBankDropdownOpen(false);
     setBankOptions([]);
     // Auto-fill IFSC prefix if not already set
@@ -419,7 +426,7 @@ export default function RegisterScreen() {
 
   const validateBankStep = () => {
     if (!bankAccountName.trim()) { Alert.alert('Required', 'Enter account holder name.'); return false; }
-    if (!bankName.trim()) { Alert.alert('Required', 'Select your bank from the search list.'); return false; }
+    if (!bankSelected || !bankName.trim()) { Alert.alert('Required', 'Select your bank from the dropdown list.'); return false; }
     if (bankAccountNumber.trim().length < 9) { Alert.alert('Invalid', 'Account number must be at least 9 digits.'); return false; }
     if (bankAccountNumber !== bankConfirmNumber) { Alert.alert('Mismatch', 'Account numbers do not match. Please re-enter.'); return false; }
     if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankIfscCode.toUpperCase())) { Alert.alert('Invalid IFSC', 'IFSC format should be like SBIN0001234.'); return false; }
@@ -817,10 +824,22 @@ export default function RegisterScreen() {
               label="Bank name"
               icon="magnify"
               value={bankSearchQuery}
-              onChangeText={searchBanks}
+              onChangeText={(value) => searchBanks(value)}
+              onFocus={loadPopularBanks}
               placeholder="Search your bank (e.g. State Bank)"
               returnKeyType="search"
-              rightSlot={bankSearching ? <ActivityIndicator size="small" color="#0E8A63" /> : undefined}
+              rightSlot={
+                bankSearching
+                  ? <ActivityIndicator size="small" color="#0E8A63" />
+                  : bankSelected
+                    ? <MaterialCommunityIcons name="check-circle" size={20} color="#16A34A" />
+                    : undefined
+              }
+              helperText={
+                bankSelected
+                  ? 'Bank selected from the approved list.'
+                  : 'You must pick a bank from the dropdown list.'
+              }
             />
             {bankDropdownOpen && bankOptions.length > 0 && (
               <View style={styles.bankDropdown}>

@@ -17,6 +17,7 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState(() => sanitizePhone(String(params.defaultPhone || '')));
   const [loading, setLoading] = useState(false);
   const [redirectingToSignup, setRedirectingToSignup] = useState(false);
+  const [signupRedirectCountdown, setSignupRedirectCountdown] = useState(3);
   const [showWelcome, setShowWelcome] = useState(false);
   const pendingNavRef = useRef<(() => void) | null>(null);
 
@@ -30,10 +31,21 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!redirectingToSignup || !sanitizedPhone) return;
-    const timer = setTimeout(() => {
-      router.replace({ pathname: '/register', params: { defaultPhone: sanitizedPhone } });
-    }, 1350);
-    return () => clearTimeout(timer);
+
+    setSignupRedirectCountdown(3);
+
+    const interval = setInterval(() => {
+      setSignupRedirectCountdown((current) => {
+        if (current <= 1) {
+          clearInterval(interval);
+          router.replace({ pathname: '/register', params: { defaultPhone: sanitizedPhone } });
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, [redirectingToSignup, router, sanitizedPhone]);
 
   const handleSendOtp = async () => {
@@ -118,8 +130,12 @@ export default function LoginScreen() {
           variant="info"
           icon="account-arrow-right-outline"
           title="Partner account not found"
-          description="This mobile number is not registered in delivery partner accounts yet."
-          caption="Opening signup flow"
+          description="This mobile number is not registered in delivery partner accounts yet. We will take you to signup so you can create your partner profile."
+          caption={
+            signupRedirectCountdown > 0
+              ? `Opening signup in ${signupRedirectCountdown}s`
+              : 'Opening signup now'
+          }
         />
       ) : null}
 

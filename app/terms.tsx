@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,7 +25,7 @@ export default function TermsScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           <Text style={styles.title}>Terms of Service</Text>
           <Text style={styles.paragraph}>
-            Welcome to Anusha Bazaar. These Terms of Service ("Terms") govern your use of our website and mobile application (collectively, the "Service") operated by Anusha Bazaar Technologies Private Limited.
+            Welcome to Anusha Bazaar. These Terms of Service ({'"'}Terms{'"'}) govern your use of our website and mobile application (collectively, the {'"'}Service{'"'}) operated by Anusha Bazaar Technologies Private Limited.
           </Text>
           <Text style={styles.paragraph}>
             By accessing or using the Service, you agree to be bound by these Terms. If you disagree with any part of the terms, then you may not access the Service.

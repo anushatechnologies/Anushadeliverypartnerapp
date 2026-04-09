@@ -14,6 +14,10 @@ export type UserProfile = {
   vehicleType: string;
   vehicleModel?: string;
   registrationNumber?: string;
+  accountName?: string;
+  accountNumber?: string;
+  bankName?: string;
+  ifscCode?: string;
   photo: string | null;
   aadhaar?: string;
   pan?: string;
@@ -86,6 +90,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                       vehicleType: p.vehicleType,
                       vehicleModel: p.vehicleModel,
                       registrationNumber: p.registrationNumber,
+                      accountName: p.accountName || prev.user?.accountName,
+                      accountNumber: p.accountNumber || prev.user?.accountNumber,
+                      bankName: p.bankName || prev.user?.bankName,
+                      ifscCode: p.ifscCode || prev.user?.ifscCode,
                       photo: p.profilePhotoUrl || prev.user?.photo,
                     },
                     verificationStatus: p.approvalStatus?.toLowerCase() || prev.verificationStatus,
@@ -131,6 +139,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                   vehicleType: p.vehicleType,
                   vehicleModel: p.vehicleModel || "",
                   registrationNumber: p.registrationNumber || "",
+                  accountName: p.accountName || "",
+                  accountNumber: p.accountNumber || "",
+                  bankName: p.bankName || "",
+                  ifscCode: p.ifscCode || "",
                   photo: p.profilePhotoUrl || null,
                 },
                 verificationStatus: p.approvalStatus?.toLowerCase() || null,
