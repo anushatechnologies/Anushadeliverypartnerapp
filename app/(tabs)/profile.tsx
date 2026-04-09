@@ -185,9 +185,22 @@ export default function Profile() {
                 
                 <View style={styles.profileInfo}>
                   <Text style={styles.nameText}>{user?.name || "Rider Partner"}</Text>
-                  <Text style={styles.phoneText}>+91 {user?.phone || '0000000000'}</Text>
+                  <Text style={styles.phoneText}>
+                    {(() => {
+                      const raw = user?.phone || '0000000000';
+                      // Strip leading "91" country-code if stored with it (12 digits)
+                      const normalized = raw.startsWith('91') && raw.length === 12 ? raw.slice(2) : raw;
+                      return `+91 ${normalized}`;
+                    })()}
+                  </Text>
                   <View style={styles.idBadgeMini}>
-                    <Text style={styles.idTextMini}>ID: AB-{user?.phone?.slice(-4) || '0000'}</Text>
+                    <Text style={styles.idTextMini}>
+                      {(() => {
+                        const raw = user?.phone || '0000000000';
+                        const normalized = raw.startsWith('91') && raw.length === 12 ? raw.slice(2) : raw;
+                        return `ID: AB-${normalized.slice(-4)}`;
+                      })()}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -488,8 +501,18 @@ function MenuAction({ icon, label, onPress, value, status, locked }: any) {
        <View style={styles.menuLineRight}>
           {value && <Text style={styles.menuLineValue}>{value}</Text>}
           {status && (
-            <View style={[styles.menuStatusBadge, { backgroundColor: status === 'approved' ? '#DCFCE7' : '#FEF3C7' }]}>
-               <Text style={[styles.menuStatusBadgeText, { color: status === 'approved' ? '#166534' : '#92400E' }]}>{status}</Text>
+            <View style={[
+              styles.menuStatusBadge,
+              { backgroundColor: status === 'approved' ? '#DCFCE7' : status === 'rejected' ? '#FEE2E2' : '#FEF3C7' }
+            ]}>
+               <View style={[styles.kycStatusDot, {
+                 backgroundColor: status === 'approved' ? '#22C55E' : status === 'rejected' ? '#EF4444' : '#F59E0B'
+               }]} />
+               <Text style={[styles.menuStatusBadgeText, {
+                 color: status === 'approved' ? '#166534' : status === 'rejected' ? '#991B1B' : '#92400E'
+               }]}>
+                 {status.charAt(0).toUpperCase() + status.slice(1)}
+               </Text>
             </View>
           )}
           <MaterialCommunityIcons
@@ -933,7 +956,8 @@ const styles = StyleSheet.create({
   menuLineLabel: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
   menuLineRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   menuLineValue: { color: '#94A3B8', fontSize: 14, fontWeight: '600' },
-  menuStatusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  menuStatusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  kycStatusDot: { width: 7, height: 7, borderRadius: 3.5 },
   menuStatusBadgeText: { fontSize: 11, fontWeight: '800', textTransform: 'capitalize' },
   menuDividerLine: { height: 1, backgroundColor: '#F8FAFC', marginHorizontal: 16 },
 

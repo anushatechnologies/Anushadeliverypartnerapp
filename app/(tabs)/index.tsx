@@ -318,10 +318,30 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
 
   const carouselBanners = [
-    { id: '1', title: 'Multi-Vendor Pickups', subtitle: 'Earn 2x on orders from multiple stores', icon: 'storefront-outline' as const, colors: ['#14A06D', '#0A6A4C'], iconBg: 'rgba(255,255,255,0.2)' },
-    { id: '2', title: 'New Vendors Added!', subtitle: '5 new grocery stores near you', icon: 'basket-check-outline' as const, colors: ['#10B981', '#059669'], iconBg: 'rgba(255,255,255,0.2)' },
-    { id: '3', title: 'Refer & Earn', subtitle: 'Get ₹500 for every new partner', icon: 'gift-outline' as const, colors: ['#F59E0B', '#D97706'], iconBg: 'rgba(255,255,255,0.2)' },
-    { id: '4', title: 'Peak Hours', subtitle: '3x Surge in your current location', icon: 'lightning-bolt' as const, colors: ['#EF4444', '#DC2626'], iconBg: 'rgba(255,255,255,0.2)' },
+    {
+      id: '1',
+      title: 'Ride & Earn More',
+      subtitle: 'Every delivery brings you closer to your goals',
+      image: require('../../assets/delivery_person.png'),
+      overlay: ['rgba(10,106,76,0.72)', 'rgba(14,138,99,0.55)'] as const,
+      badge: '🏍️  Fast Delivery',
+    },
+    {
+      id: '2',
+      title: 'Refer & Earn ₹500',
+      subtitle: 'Invite a friend — earn when they complete 10 trips',
+      image: require('../../assets/refer.png'),
+      overlay: ['rgba(217,119,6,0.72)', 'rgba(245,158,11,0.55)'] as const,
+      badge: '🎁  Referral Bonus',
+    },
+    {
+      id: '3',
+      title: 'Your Partner Journey',
+      subtitle: 'Track earnings, grow fast, ride smart every day',
+      image: require('../../assets/hero_illustration.png'),
+      overlay: ['rgba(79,70,229,0.72)', 'rgba(99,102,241,0.55)'] as const,
+      badge: '📈  Growth Partner',
+    },
   ];
 
   useEffect(() => {
@@ -506,32 +526,37 @@ export default function Home() {
             >
               {carouselBanners.map((banner, index) => (
                 <View key={banner.id} style={styles.autoBannerCard}>
+                  <ImageBackground
+                    source={banner.image}
+                    style={styles.bannerImageBg}
+                    imageStyle={styles.bannerImageStyle}
+                    resizeMode="cover"
+                  >
                     <LinearGradient
-                      colors={banner.colors as any}
+                      colors={banner.overlay}
                       start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
+                      end={{ x: 1, y: 0.8 }}
                       style={styles.bannerGradient}
                     >
-                    <View style={styles.bannerContent}>
-                      <View style={styles.bannerTextContainer}>
-                        <Animated.Text 
+                      <View style={styles.bannerContent}>
+                        <View style={styles.bannerBadgePill}>
+                          <Text style={styles.bannerBadgeText}>{banner.badge}</Text>
+                        </View>
+                        <Animated.Text
                           entering={FadeInLeft.delay(index * 100)}
                           style={styles.autoBannerTitle}
                         >
                           {banner.title}
                         </Animated.Text>
-                        <Animated.Text 
+                        <Animated.Text
                           entering={FadeInLeft.delay(index * 150)}
                           style={styles.autoBannerSub}
                         >
                           {banner.subtitle}
                         </Animated.Text>
                       </View>
-                      <View style={[styles.autoBannerIconCircle, { backgroundColor: banner.iconBg }]}>
-                        <MaterialCommunityIcons name={banner.icon} size={32} color="#fff" />
-                      </View>
-                    </View>
-                  </LinearGradient>
+                    </LinearGradient>
+                  </ImageBackground>
                 </View>
               ))}
             </ScrollView>
@@ -748,12 +773,15 @@ const styles = StyleSheet.create({
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100, paddingTop: 20, backgroundColor: '#F8FAFC' },
   carouselContainer: { marginBottom: 24, width: '100%' },
-  autoBannerCard: { width: width - 36, height: (width - 36) / 2, marginRight: 12, borderRadius: 24, overflow: 'hidden' },
-  bannerGradient: { flex: 1, borderRadius: 24 },
-  bannerContent: { flex: 1, padding: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bannerTextContainer: { flex: 1, marginRight: 15 },
-  autoBannerTitle: { fontSize: 20, fontWeight: '900', color: '#FFFFFF', marginBottom: 6, letterSpacing: -0.5 },
-  autoBannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '600', lineHeight: 18 },
+  autoBannerCard: { width: width - 36, height: 170, marginRight: 12, borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 12 },
+  bannerImageBg: { width: '100%', height: '100%' },
+  bannerImageStyle: { borderRadius: 24 },
+  bannerGradient: { flex: 1, padding: 20, justifyContent: 'flex-end' },
+  bannerContent: { flex: 1, justifyContent: 'flex-end' },
+  bannerBadgePill: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  bannerBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  autoBannerTitle: { fontSize: 21, fontWeight: '900', color: '#FFFFFF', marginBottom: 4, letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  autoBannerSub: { fontSize: 12, color: 'rgba(255,255,255,0.88)', fontWeight: '600', lineHeight: 17 },
   autoBannerIconCircle: { width: 64, height: 64, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   paginationDots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16, gap: 8 },
   carouselDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E2E8F0' },
