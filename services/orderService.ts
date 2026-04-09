@@ -104,6 +104,41 @@ export const orderService = {
     return res.data;
   },
 
+  // ─── Phase 7 — Delivery OTP + Photo ─────────────────────────────────────────
+
+  /** POST /api/delivery-app/orders/{orderNumber}/generate-delivery-otp */
+  generateDeliveryOtp: async (orderNumber: string) => {
+    const res = await apiClient.post(
+      `/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/generate-delivery-otp`,
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery-app/orders/{orderNumber}/confirm-delivery  (multipart)
+   * Verifies customer OTP, uploads delivery photo, marks DELIVERED.
+   */
+  confirmDeliveryWithPhoto: async (orderNumber: string, otp: string, photoUri?: string) => {
+    const formData = new FormData();
+    formData.append('otp', otp);
+    if (photoUri) {
+      const filename = photoUri.split('/').pop() ?? 'delivery.jpg';
+      formData.append('photo', { uri: photoUri, name: filename, type: 'image/jpeg' } as any);
+    }
+    const res = await apiClient.post(
+      `/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/confirm-delivery`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return res.data;
+  },
+
+  /** POST /api/delivery-app/location — rider GPS ping (no active order) */
+  updateRiderLocation: async (lat: number, lng: number) => {
+    const res = await apiClient.post('/api/delivery-app/location', { lat, lng });
+    return res.data;
+  },
+
   // ─── Cancel / Report ─────────────────────────────────────────────────────────
 
   /** POST /api/delivery-orders/{orderId}/cancel */

@@ -1,3 +1,4 @@
+import { buildImageFilePart } from '@/utils/multipart';
 import { apiClient } from './apiClient';
 
 export const profileService = {
@@ -25,13 +26,8 @@ export const profileService = {
   /** POST /api/delivery-app/profile-photo — Upload profile photo (multipart/form-data) */
   updateProfilePhoto: async (fileUri: string) => {
     const formData = new FormData();
-    const filename = fileUri.split('/').pop() || 'profile.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : `image/jpeg`;
-    formData.append('file', { uri: fileUri, name: filename, type } as any);
-    const res = await apiClient.post('/api/delivery-app/profile-photo', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    formData.append('file', buildImageFilePart(fileUri, 'profile-photo.jpg'));
+    const res = await apiClient.post('/api/delivery-app/profile-photo', formData);
     return res.data;
   },
 
@@ -98,6 +94,14 @@ export const profileService = {
     data: { vehicleType: string; vehicleModel: string; registrationNumber: string }
   ) => {
     const res = await apiClient.put(`/api/delivery-person/${id}/vehicle`, data);
+    return res.data;
+  },
+
+  updateProfileDetailsById: async (
+    id: number,
+    data: { firstName: string; lastName: string; profilePhotoUrl?: string }
+  ) => {
+    const res = await apiClient.put(`/api/delivery-person/${id}/profile`, data);
     return res.data;
   },
 

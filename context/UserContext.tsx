@@ -106,9 +106,11 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
           // Sync FCM token silently
           if (cachedProfile.user?.phone) {
-            messaging().getToken()
-              .then(tk => { if (tk) authService.saveFcmToken(cachedProfile.user.phone, tk); })
-              .catch(() => {});
+            try {
+              messaging().getToken()
+                .then(tk => { if (tk) authService.saveFcmToken(cachedProfile.user.phone, tk); })
+                .catch(() => {});
+            } catch (_) {}
           }
           return;
         }
@@ -139,9 +141,11 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
               await AsyncStorage.setItem(STORAGE_KEYS.PROFILE_STATE, JSON.stringify({ user: newState.user, verificationStatus: newState.verificationStatus }));
 
               if (p.phoneNumber) {
-                messaging().getToken()
-                  .then(tk => { if (tk) authService.saveFcmToken(p.phoneNumber, tk); })
-                  .catch(() => {});
+                try {
+                  messaging().getToken()
+                    .then(tk => { if (tk) authService.saveFcmToken(p.phoneNumber, tk); })
+                    .catch(() => {});
+                } catch (_) {}
               }
               return;
             }
