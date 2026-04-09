@@ -14,7 +14,7 @@ export default function NotificationsScreen() {
   const notifications = [
     { title: "Peak Hour Started!", desc: "Earn 20% extra on every order from 7 PM to 10 PM.", time: "2m ago", icon: "lightning-bolt", color: "#FF9F0A" },
     { title: "Payout Processed", desc: "Your weekly earnings of ₹4,250 have been sent to your bank account.", time: "1h ago", icon: "bank-transfer", color: "#00C853" },
-    { title: "New Policy Update", desc: "Please review the updated delivery guidelines effective from next Monday.", time: "5h ago", icon: "file-document-outline", color: "#702DFF" },
+    { title: "New Policy Update", desc: "Please review the updated delivery guidelines effective from next Monday.", time: "5h ago", icon: "file-document-outline", color: "#0E8A63" },
     { title: "Congratulations!", desc: "You completed 50 deliveries this week. Gold Badge unlocked!", time: "1d ago", icon: "trophy", color: "#FFD700" },
   ];
 

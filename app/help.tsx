@@ -17,7 +17,7 @@ export default function HelpScreen() {
     {
       category: "Getting Started",
       icon: "rocket-launch-outline" as const,
-      color: "#6366F1",
+      color: "#14A06D",
       faqs: [
         { q: "How do I start accepting orders?", a: "Toggle the 'Online' switch on the home screen. Once online, you'll receive order notifications automatically based on your current location and proximity to vendors." },
         { q: "What documents are required for verification?", a: "You need to upload your Aadhaar Card, PAN Card, and Driving License along with clear photos of each document. Your profile photo taken via selfie is also required." },
@@ -52,7 +52,7 @@ export default function HelpScreen() {
     {
       category: "Account & Profile",
       icon: "account-cog-outline" as const,
-      color: "#7C3AED",
+      color: "#0E8A63",
       faqs: [
         { q: "How do I update my profile photo?", a: "Go to Profile tab, tap on your profile photo, and take a new selfie or upload from gallery. Note: Once your profile is verified, photo changes require admin re-approval." },
         { q: "My vehicle has changed, how do I update?", a: "Go to Profile > Vehicle Information to update your vehicle type, model, and registration number. New vehicle details may require re-verification." },
@@ -123,10 +123,10 @@ export default function HelpScreen() {
            {/* Quick Contact Cards */}
            <View style={styles.contactRow}>
               <TouchableOpacity 
-                style={[styles.contactCard, { backgroundColor: '#EEF2FF' }]} 
+                style={[styles.contactCard, { backgroundColor: '#F0FDF4' }]} 
                 onPress={() => Linking.openURL('tel:6309981555')}
               >
-                 <View style={[styles.contactIconBox, { backgroundColor: '#4F46E5' }]}>
+                 <View style={[styles.contactIconBox, { backgroundColor: '#0E8A63' }]}>
                     <MaterialCommunityIcons name="phone" size={24} color="#fff" />
                  </View>
                  <Text style={styles.contactLabel}>Call Us</Text>
@@ -236,7 +236,7 @@ export default function HelpScreen() {
            {/* Still Need Help */}
            <View style={styles.helpCard}>
               <View style={styles.helpHead}>
-                 <MaterialCommunityIcons name="headphones" size={30} color="#702DFF" />
+                 <MaterialCommunityIcons name="headphones" size={30} color="#0E8A63" />
                  <Text style={styles.helpTitle}>Still need help?</Text>
               </View>
               <Text style={styles.helpDesc}>Our support team is available 24/7 to assist you with any delivery issues.</Text>
@@ -298,10 +298,10 @@ const styles = StyleSheet.create({
   noResultsText: { fontSize: 16, fontWeight: '800', color: '#94A3B8', marginTop: 16 },
   noResultsSub: { fontSize: 13, color: '#CBD5E1', marginTop: 4 },
   
-  helpCard: { backgroundColor: '#F3E8FF', borderRadius: 28, padding: 24, marginTop: 16, alignItems: 'center' },
+  helpCard: { backgroundColor: '#F0FDF4', borderRadius: 28, padding: 24, marginTop: 16, alignItems: 'center' },
   helpHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   helpTitle: { fontSize: 20, fontWeight: '900', color: '#1A1A1A' },
   helpDesc: { textAlign: 'center', color: '#6B7280', fontSize: 14, lineHeight: 22, marginBottom: 24 },
-  supportBtn: { backgroundColor: '#702DFF', width: '100%', height: 56, borderRadius: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, shadowColor: '#702DFF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
+  supportBtn: { backgroundColor: '#0E8A63', width: '100%', height: 56, borderRadius: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, shadowColor: '#0E8A63', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
   supportBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
 });

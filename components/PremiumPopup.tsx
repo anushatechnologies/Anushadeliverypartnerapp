@@ -19,7 +19,7 @@ export default function PremiumPopup({ visible, type, title, message }: Props) {
   if (!visible) return null;
 
   const iconName = type === "success" ? "check-decagram" : type === "redirect" ? "rocket-launch" : "alert-circle";
-  const iconColor = type === "success" ? "#0A8754" : type === "redirect" ? "#702DFF" : "#FF2D55";
+  const iconColor = type === "success" ? "#0A8754" : type === "redirect" ? "#0E8A63" : "#FF2D55";
 
   return (
     <Modal transparent visible={visible} animationType="none">

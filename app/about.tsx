@@ -28,7 +28,7 @@ export default function AboutScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           <View style={styles.logoContainer}>
             <LinearGradient
-              colors={['#7C3AED', '#6366F1']}
+              colors={['#0E8A63', '#14A06D']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.logoBox}
@@ -55,7 +55,7 @@ export default function AboutScreen() {
             
             <View style={styles.contactRow}>
               <View style={styles.iconBox}>
-                <MaterialCommunityIcons name="email-outline" size={20} color="#7C3AED" />
+                <MaterialCommunityIcons name="email-outline" size={20} color="#0E8A63" />
               </View>
               <View>
                 <Text style={styles.contactLabel}>Email Us</Text>
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 60 },
   
   logoContainer: { alignItems: 'center', marginVertical: 32 },
-  logoBox: { width: 100, height: 100, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 12, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, marginBottom: 20 },
+  logoBox: { width: 100, height: 100, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 12, shadowColor: '#14A06D', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, marginBottom: 20 },
   brandName: { fontSize: 26, fontWeight: '900', color: '#0F172A', letterSpacing: -0.5 },
   partnerText: { fontSize: 16, color: '#64748B', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 4 },
   versionBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginTop: 16 },

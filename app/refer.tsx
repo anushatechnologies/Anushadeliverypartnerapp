@@ -47,7 +47,7 @@ export default function ReferScreen() {
 
                <Animated.View entering={ZoomIn.duration(800)} style={styles.illustrationWrap}>
                   <View style={styles.glowCircle} />
-                  <MaterialCommunityIcons name="wallet-giftcard" size={100} color="#702DFF" />
+                  <MaterialCommunityIcons name="wallet-giftcard" size={100} color="#0E8A63" />
                </Animated.View>
 
                <Animated.View entering={FadeInUp.delay(200)} style={styles.textCenter}>
@@ -70,7 +70,7 @@ export default function ReferScreen() {
                   <View style={styles.codeBox}>
                      <Text style={styles.codeText}>SUP123</Text>
                      <TouchableOpacity onPress={() => { }} style={styles.copyBtn}>
-                        <MaterialCommunityIcons name="content-copy" size={20} color="#702DFF" />
+                        <MaterialCommunityIcons name="content-copy" size={20} color="#0E8A63" />
                      </TouchableOpacity>
                   </View>
                   <TouchableOpacity onPress={onShare} style={styles.shareBtn}>
@@ -134,11 +134,11 @@ const styles = StyleSheet.create({
    stepIconWrap: { width: 48, height: 48, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
    stepLabel: { color: '#606060', fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
    referCard: { width: '100%', backgroundColor: 'rgba(112, 45, 255, 0.05)', borderRadius: 32, padding: 32, borderWidth: 1, borderColor: 'rgba(112, 45, 255, 0.2)', alignItems: 'center' },
-   referLabel: { color: '#702DFF', fontSize: 12, fontWeight: '900', letterSpacing: 2 },
+   referLabel: { color: '#0E8A63', fontSize: 12, fontWeight: '900', letterSpacing: 2 },
    codeBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A0C2E', paddingHorizontal: 24, paddingVertical: 16, borderRadius: 20, marginTop: 16, gap: 20, borderWidth: 1, borderColor: 'rgba(112, 45, 255, 0.3)' },
    codeText: { color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: 4 },
    copyBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(112, 45, 255, 0.1)', justifyContent: 'center', alignItems: 'center' },
-   shareBtn: { backgroundColor: '#702DFF', width: '100%', height: 60, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 32 },
+   shareBtn: { backgroundColor: '#0E8A63', width: '100%', height: 60, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 32 },
    shareBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
    sectionHeader: { width: '100%', marginTop: 48, marginBottom: 20 },
    sectionTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },

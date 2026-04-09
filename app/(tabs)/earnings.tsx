@@ -103,7 +103,7 @@ export default function Earnings() {
                    <Text style={styles.cardValue}>₹{stats.totalEarnings.toFixed(2)}</Text>
                 </View>
                 <View style={styles.periodBadge}>
-                   <MaterialCommunityIcons name="calendar-range" size={14} color="#702DFF" />
+                   <MaterialCommunityIcons name="calendar-range" size={14} color="#0E8A63" />
                    <Text style={styles.periodText}>Lifetime</Text>
                 </View>
              </View>
@@ -133,7 +133,7 @@ export default function Earnings() {
           {/* Collapsible Earnings History */}
           <TouchableOpacity onPress={() => setShowHistory(!showHistory)} style={styles.collapsibleHeader}>
              <View style={styles.row}>
-                <MaterialCommunityIcons name="history" size={24} color="#702DFF" />
+                <MaterialCommunityIcons name="history" size={24} color="#0E8A63" />
                 <Text style={styles.collapsibleTitle}>{t('history')}</Text>
              </View>
              <MaterialCommunityIcons name={showHistory ? "chevron-up" : "chevron-down"} size={24} color="#A0A0A0" />
