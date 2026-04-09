@@ -20,17 +20,17 @@ const { width } = Dimensions.get('window');
 
 const SLIDES = [
   {
-    image: require('@/assets/images/hero_illustration.png'),
+    image: require('@/assets/images/hero_illustration.jpg'),
     headline: 'Deliver with Anusha Bazaar',
     sub: 'Join our partner network and earn daily delivering local orders across your city.',
   },
   {
-    image: require('@/assets/images/partner_banner.png'),
+    image: require('@/assets/images/partner_banner.jpg'),
     headline: 'Fast OTP. Easy KYC.',
     sub: 'Sign in with your mobile, complete verification step by step, and go live fast.',
   },
   {
-    image: require('@/assets/images/delivery_person.png'),
+    image: require('@/assets/images/delivery_person.jpg'),
     headline: 'Track. Deliver. Earn.',
     sub: 'Live order dashboard, payout tracking, and real-time status — all in one place.',
   },

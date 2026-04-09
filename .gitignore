@@ -2,8 +2,8 @@ node_modules/
 # .expo/
 dist/
 web-build/
-.bundle-out/
-.gradle-user-home/
+.bundle-out*/
+.gradle-user-home*/
 expo-env.d.ts
 .kotlin/
 *.orig.*
