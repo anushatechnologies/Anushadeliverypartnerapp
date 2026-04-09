@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -6,6 +6,7 @@ import { AuthScaffold } from '@/components/auth/AuthScaffold';
 import { PartnerButton } from '@/components/auth/PartnerButton';
 import { PartnerFlowNotice } from '@/components/auth/PartnerFlowNotice';
 import { PartnerInput } from '@/components/auth/PartnerInput';
+import { WelcomeBackModal } from '@/components/auth/WelcomeBackModal';
 import { partnerTheme } from '@/constants/partnerTheme';
 import { authService } from '@/services/authService';
 import { formatPhone, sanitizePhone } from '@/utils/partnerFormatters';
@@ -16,6 +17,8 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState(() => sanitizePhone(String(params.defaultPhone || '')));
   const [loading, setLoading] = useState(false);
   const [redirectingToSignup, setRedirectingToSignup] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const pendingNavRef = useRef<(() => void) | null>(null);
 
   const sanitizedPhone = useMemo(() => sanitizePhone(phone), [phone]);
   const isValidPhone = sanitizedPhone.length === 10;
@@ -27,14 +30,9 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!redirectingToSignup || !sanitizedPhone) return;
-
     const timer = setTimeout(() => {
-      router.replace({
-        pathname: '/register',
-        params: { defaultPhone: sanitizedPhone },
-      });
+      router.replace({ pathname: '/register', params: { defaultPhone: sanitizedPhone } });
     }, 1350);
-
     return () => clearTimeout(timer);
   }, [redirectingToSignup, router, sanitizedPhone]);
 
@@ -51,25 +49,49 @@ export default function LoginScreen() {
 
       if (!status?.exists) {
         setRedirectingToSignup(true);
+        setLoading(false);
         return;
       }
 
-      const confirmation = await auth().signInWithPhoneNumber(fullPhone);
-      router.push({
-        pathname: '/otp',
-        params: {
-          phone: sanitizedPhone,
-          verificationId: confirmation.verificationId,
-          from: 'login',
-        },
-      });
+      // Fire OTP in background while showing welcome modal
+      const confirmationPromise = auth().signInWithPhoneNumber(fullPhone);
+      setShowWelcome(true);
+      pendingNavRef.current = null;
+
+      confirmationPromise
+        .then((confirmation) => {
+          pendingNavRef.current = () => {
+            router.push({
+              pathname: '/otp',
+              params: {
+                phone: sanitizedPhone,
+                verificationId: confirmation.verificationId,
+                from: 'login',
+              },
+            });
+          };
+        })
+        .catch((err) => {
+          setShowWelcome(false);
+          setLoading(false);
+          Alert.alert('Could not send OTP', err?.message || 'Please try again.');
+        });
+
+      // Auto-dismiss after 2.6s then navigate
+      setTimeout(() => {
+        setShowWelcome(false);
+        setTimeout(() => {
+          pendingNavRef.current?.();
+          setLoading(false);
+        }, 150);
+      }, 2600);
+
     } catch (error: any) {
+      setLoading(false);
       Alert.alert(
         'Unable to continue',
         error?.response?.data?.message || error?.message || 'OTP could not be sent right now.',
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -88,6 +110,9 @@ export default function LoginScreen() {
         </View>
       }
     >
+      {/* WelcomeBackModal renders as native Modal overlay — position in tree doesn't matter */}
+      <WelcomeBackModal visible={showWelcome} phone={sanitizedPhone} />
+
       {redirectingToSignup ? (
         <PartnerFlowNotice
           variant="info"

@@ -1,34 +1,59 @@
-import { Stack, useRouter, useSegments } from "expo-router";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { UserProvider, useUser } from "../context/UserContext";
-import { LanguageProvider } from "../context/LanguageContext";
-import { useEffect, useRef } from "react";
-import AppLoader from "../components/apploader";
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { UserProvider, useUser } from '../context/UserContext';
+import { LanguageProvider } from '../context/LanguageContext';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AppLoader from '../components/apploader';
 
 function NavigationGuard() {
   const { authState } = useUser();
   const segments = useSegments();
   const router = useRouter();
+  const [permissionsChecked, setPermissionsChecked] = useState(false);
+  const [needsPermissions, setNeedsPermissions] = useState(false);
+
+  // Check first-launch permissions flag once
+  useEffect(() => {
+    AsyncStorage.getItem('@anusha_permissions_shown').then((val) => {
+      setNeedsPermissions(!val);
+      setPermissionsChecked(true);
+    });
+  }, []);
 
   useEffect(() => {
-    if (authState.isLoading) return;
+    if (authState.isLoading || !permissionsChecked) return;
 
-    // Check if current route is within protected or public areas
     const routeSegments = segments as string[];
-    const routePath = routeSegments.join("/");
-    const inProtectedArea = routePath.includes("(tabs)") || routePath.includes("verification") || routePath.includes("kyc");
-    const inAuthFlow = routePath.includes("otp") || routePath.includes("register");
-    const isLoginScreen = routeSegments.length === 0 || routePath === "index" || routePath === "login";
+    const routePath = routeSegments.join('/');
+    const onPermissionsScreen = routePath.includes('permissions');
+    const inProtectedArea =
+      routePath.includes('(tabs)') ||
+      routePath.includes('verification') ||
+      routePath.includes('kyc');
+    const inAuthFlow =
+      routePath.includes('otp') || routePath.includes('register');
+    const isRootOrLogin =
+      routeSegments.length === 0 ||
+      routePath === 'index' ||
+      routePath === 'login';
 
-    if (!authState.isLoggedIn && inProtectedArea) {
-        router.replace("/login");
-    } else if (authState.isLoggedIn && isLoginScreen && !inAuthFlow) {
-        // Logged in but on login screen (not in auth flow) -> go to app
-        router.replace("/(tabs)");
+    // First launch — show permissions before anything else
+    if (needsPermissions && !onPermissionsScreen) {
+      setNeedsPermissions(false); // prevent re-trigger
+      router.replace('/permissions');
+      return;
     }
-  }, [authState.isLoggedIn, authState.isLoading, segments]);
 
-  if (authState.isLoading) {
+    // Auth guard
+    if (!authState.isLoggedIn && inProtectedArea) {
+      router.replace('/login');
+    } else if (authState.isLoggedIn && isRootOrLogin && !inAuthFlow) {
+      router.replace('/(tabs)');
+    }
+  }, [authState.isLoggedIn, authState.isLoading, segments, permissionsChecked, needsPermissions]);
+
+  if (authState.isLoading || !permissionsChecked) {
     return <AppLoader />;
   }
 
