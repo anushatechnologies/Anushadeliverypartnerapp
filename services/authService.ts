@@ -1,9 +1,6 @@
-import type { DeliveryAuthResponse } from '@/types/partner';
+import type { CheckPhoneResponse, DeliveryAuthResponse } from '@/types/partner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
 import { apiClient } from './apiClient';
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
 
 interface SignupPayload {
   firebaseIdToken: string;
@@ -17,67 +14,136 @@ interface SignupPayload {
 }
 
 export const authService = {
-  checkPhone: async (phoneNumber: string) => {
+  /**
+   * GET /api/delivery/auth/check-phone/{phoneNumber}
+   * Public — check if a phone number is already registered.
+   * Phone must be URL-encoded E.164 format (e.g. %2B919948598350).
+   */
+  checkPhone: async (phoneNumber: string): Promise<CheckPhoneResponse> => {
     const res = await apiClient.get(
       `/api/delivery/auth/check-phone/${encodeURIComponent(phoneNumber)}`,
     );
-    return res.data as { exists?: boolean; registered?: boolean; message?: string };
+    return res.data as CheckPhoneResponse;
   },
 
+  /**
+   * POST /api/delivery/auth/upload-profile-photo
+   * Public — upload profile photo before signup.
+   * Returns { success, photoUrl, message }.
+   */
   uploadProfilePhoto: async (fileUri: string) => {
     const token = await AsyncStorage.getItem('@anusha_jwt_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    console.log('[PHOTO UPLOAD] Starting upload via Native fetch', { fileUri });
 
-    console.log('[PHOTO UPLOAD] Starting upload via FileSystem.uploadAsync', { fileUri });
+    const formData = new FormData();
+    const filename = fileUri.split('/').pop() || 'profile.jpg';
+    formData.append('file', {
+      uri: fileUri,
+      name: filename,
+      type: 'image/jpeg',
+    } as any);
 
-    const result = await FileSystem.uploadAsync(
-      `${BASE_URL}/api/delivery/auth/upload-profile-photo`,
-      fileUri,
-      {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: 'file',
-        mimeType: 'image/jpeg',
-        headers,
-      },
-    );
+    // Bypass Axios for multipart because Android Axios drops FormData boundaries
+    const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
+    const init: RequestInit = {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    };
 
-    console.log('[PHOTO UPLOAD] Response', { status: result.status, body: result.body });
+    const response = await fetch(`${BASE_URL}/api/delivery/auth/upload-profile-photo`, init);
+    const data = await response.json();
 
-    if (result.status < 200 || result.status >= 300) {
-      const msg = (() => {
-        try {
-          return JSON.parse(result.body)?.message;
-        } catch {
-          return result.body;
-        }
-      })();
-      throw new Error(msg || `Upload failed with status ${result.status}`);
+    if (!response.ok) {
+       console.warn('[PHOTO UPLOAD ERROR]', data);
+       throw new Error(data?.message || 'Upload failed');
     }
 
-    return JSON.parse(result.body) as { success?: boolean; photoUrl: string; message?: string };
+    console.log('[PHOTO UPLOAD] Response', data);
+    return data as { success?: boolean; photoUrl: string; message?: string };
   },
 
-  signup: async (data: SignupPayload) => {
+  /**
+   * POST /api/delivery/auth/signup
+   * Public — register a new delivery partner.
+   * Returns full DeliveryAuthResponse including jwtToken and deliveryPersonId.
+   */
+  signup: async (data: SignupPayload): Promise<DeliveryAuthResponse> => {
     const payload = { ...data };
     if (!payload.fcmToken) delete payload.fcmToken;
     const res = await apiClient.post('/api/delivery/auth/signup', payload);
     return res.data as DeliveryAuthResponse;
   },
 
-  login: async (firebaseIdToken: string, fcmToken?: string) => {
+  /**
+   * POST /api/delivery/auth/login
+   * Public — login with Firebase ID token.
+   * Returns full DeliveryAuthResponse including jwtToken and approvalStatus.
+   *
+   * IMPORTANT: Login succeeding does NOT mean the account is approved.
+   * Always read approvalStatus / isApprovedByAdmin / onboardingStatus.canGoOnline.
+   */
+  login: async (firebaseIdToken: string, fcmToken?: string): Promise<DeliveryAuthResponse> => {
     const payload: { firebaseIdToken: string; fcmToken?: string } = { firebaseIdToken };
     if (fcmToken) payload.fcmToken = fcmToken;
     const res = await apiClient.post('/api/delivery/auth/login', payload);
     return res.data as DeliveryAuthResponse;
   },
 
-  saveFcmToken: async (phone: string, fcmToken: string) => {
+  /**
+   * POST /api/delivery/auth/refresh
+   * Public — refresh accessToken using a valid refreshToken.
+   */
+  refresh: async (refreshToken: string) => {
+    const res = await apiClient.post('/api/delivery/auth/refresh', { refreshToken });
+    return res.data as { 
+      accessToken: string; 
+      refreshToken: string; 
+      jwtToken?: string; 
+      token?: string; 
+      expiresIn: number; 
+    };
+  },
+
+  /**
+   * POST /api/delivery/auth/logout
+   * Public — revoke the refreshToken on the server.
+   */
+  logout: async (refreshToken: string) => {
+    const res = await apiClient.post('/api/delivery/auth/logout', { refreshToken });
+    return res.data;
+  },
+
+  /**
+   * POST /api/save-token
+   * Public — save or refresh an FCM device token so the backend can push notifications.
+   */
+  saveFcmToken: async (phone: string, fcmToken: string): Promise<void> => {
     try {
       await apiClient.post('/api/save-token', { phone, fcmToken });
     } catch (error) {
-      console.warn('FCM token sync failed', error);
+      console.warn('[FCM] Token sync failed', error);
     }
+  },
+
+  /**
+   * GET /api/delivery/auth/fare-rules
+   * Public — get the current delivery fare rules.
+   */
+  getFareRules: async () => {
+    const res = await apiClient.get('/api/delivery/auth/fare-rules');
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery/auth/fare/calculate
+   * Public — calculate fare estimate for a trip.
+   */
+  calculateFare: async (vehicleType: string, distanceKm: number) => {
+    const res = await apiClient.post('/api/delivery/auth/fare/calculate', { vehicleType, distanceKm });
+    return res.data;
   },
 };

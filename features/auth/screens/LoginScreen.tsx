@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -19,7 +19,6 @@ export default function LoginScreen() {
   const [redirectingToSignup, setRedirectingToSignup] = useState(false);
   const [signupRedirectCountdown, setSignupRedirectCountdown] = useState(3);
   const [showWelcome, setShowWelcome] = useState(false);
-  const pendingNavRef = useRef<(() => void) | null>(null);
 
   const sanitizedPhone = useMemo(() => sanitizePhone(phone), [phone]);
   const isValidPhone = sanitizedPhone.length === 10;
@@ -65,38 +64,50 @@ export default function LoginScreen() {
         return;
       }
 
-      // Fire OTP in background while showing welcome modal
+      // Fire OTP — navigate to OTP screen as soon as we have the verificationId
       const confirmationPromise = auth().signInWithPhoneNumber(fullPhone);
-      setShowWelcome(true);
-      pendingNavRef.current = null;
 
+      // Show welcome modal
+      setShowWelcome(true);
+
+      // Track both: has modal dismissed AND do we have confirmation?
+      let modalDone = false;
+      let confirmationResult: any = null;
+
+      const tryNavigate = () => {
+        if (modalDone && confirmationResult) {
+          router.push({
+            pathname: '/otp',
+            params: {
+              phone: sanitizedPhone,
+              verificationId: confirmationResult.verificationId,
+              from: 'login',
+            },
+          });
+          setLoading(false);
+        }
+      };
+
+      // Dismiss modal after 2.6s
+      setTimeout(() => {
+        setShowWelcome(false);
+        setTimeout(() => {
+          modalDone = true;
+          tryNavigate();
+        }, 150);
+      }, 2600);
+
+      // Wait for Firebase OTP confirmation
       confirmationPromise
         .then((confirmation) => {
-          pendingNavRef.current = () => {
-            router.push({
-              pathname: '/otp',
-              params: {
-                phone: sanitizedPhone,
-                verificationId: confirmation.verificationId,
-                from: 'login',
-              },
-            });
-          };
+          confirmationResult = confirmation;
+          tryNavigate();
         })
         .catch((err) => {
           setShowWelcome(false);
           setLoading(false);
           Alert.alert('Could not send OTP', err?.message || 'Please try again.');
         });
-
-      // Auto-dismiss after 2.6s then navigate
-      setTimeout(() => {
-        setShowWelcome(false);
-        setTimeout(() => {
-          pendingNavRef.current?.();
-          setLoading(false);
-        }, 150);
-      }, 2600);
 
     } catch (error: any) {
       setLoading(false);

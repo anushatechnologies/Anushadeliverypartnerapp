@@ -65,10 +65,10 @@ android {
 
     defaultConfig {
         applicationId 'com.Anushadeliverypartnerapp'
-        minSdkVersion rootProject.ext.minSdkVersion
+        minSdkVersion 24
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode project.hasProperty('versionCode') ? project.versionCode.toInteger() : 95
-        versionName project.hasProperty('versionName') ? project.versionName : "2.4.18"
+        versionCode project.hasProperty('versionCode') ? project.versionCode.toInteger() : 124
+        versionName project.hasProperty('versionName') ? project.versionName : "2.4.29"
     }
 
     signingConfigs {

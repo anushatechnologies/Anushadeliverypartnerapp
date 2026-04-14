@@ -1,8 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
 import { apiClient } from './apiClient';
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
 
 export const documentService = {
   /**
@@ -16,57 +13,52 @@ export const documentService = {
     fileUri: string,
     jwtToken?: string,
   ) => {
+    const formData = new FormData();
+    formData.append('deliveryPersonId', deliveryPersonId.toString());
+    formData.append('documentType', documentType);
+    if (documentNumber) {
+      formData.append('documentNumber', documentNumber);
+    }
+    
+    // Convert fileUri to the format expected by React Native FormData
+    const filename = fileUri.split('/').pop() || `${documentType}.jpg`;
+    formData.append('file', {
+      uri: fileUri,
+      name: filename,
+      type: 'image/jpeg',
+    } as any);
+
     const storedToken = await AsyncStorage.getItem('@anusha_jwt_token');
     const token = jwtToken || storedToken;
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const parameters: Record<string, string> = {
-      deliveryPersonId: deliveryPersonId.toString(),
-      documentType,
-    };
-    if (documentNumber) parameters.documentNumber = documentNumber;
-
-    console.log('[DOC UPLOAD] Starting upload via FileSystem.uploadAsync', {
+    console.log('[DOC UPLOAD] Starting upload via Native fetch', {
       deliveryPersonId,
       documentType,
       hasDocumentNumber: Boolean(documentNumber),
-      fileUri,
+      fileName: filename,
       hasToken: Boolean(token),
     });
 
-    const result = await FileSystem.uploadAsync(
-      `${BASE_URL}/api/documents/upload`,
-      fileUri,
-      {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: 'file',
-        mimeType: 'image/jpeg',
-        parameters,
-        headers,
-      },
-    );
+    const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
+    const init: RequestInit = {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    };
 
-    console.log('[DOC UPLOAD] Response', {
-      deliveryPersonId,
-      documentType,
-      status: result.status,
-      body: result.body,
-    });
+    const response = await fetch(`${BASE_URL}/api/documents/upload`, init);
+    const data = await response.json();
 
-    if (result.status < 200 || result.status >= 300) {
-      const msg = (() => {
-        try {
-          return JSON.parse(result.body)?.message;
-        } catch {
-          return result.body;
-        }
-      })();
-      throw new Error(msg || `Upload failed with status ${result.status}`);
+    if (!response.ok) {
+       console.warn('[DOC UPLOAD ERROR]', data);
+       throw new Error(data?.message || 'Document upload failed');
     }
-
-    return JSON.parse(result.body);
+    
+    console.log('[DOC UPLOAD] Response', data);
+    return data;
   },
 
   /** GET /api/documents/validation-rules — Get document validation rules */

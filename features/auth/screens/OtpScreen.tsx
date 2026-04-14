@@ -139,15 +139,29 @@ export default function OtpScreen() {
         } catch (_) {}
 
         const response = await authService.login(idToken, fcmToken || undefined);
-        if (response.jwtToken) {
-          await AsyncStorage.setItem('@anusha_jwt_token', response.jwtToken);
+        if (response.jwtToken || response.accessToken) {
+          const accessToken = response.accessToken || response.jwtToken || response.token;
+          await AsyncStorage.setItem('@anusha_jwt_token', accessToken!);
+          if (response.refreshToken) {
+            await AsyncStorage.setItem('@anusha_refresh_token', response.refreshToken);
+          }
         }
 
         const fullName =
           response.fullName ||
           `${response.firstName || ''} ${response.lastName || ''}`.trim() || 'Delivery Partner';
-        const verificationStatus =
-          ((response.approvalStatus || 'pending').toLowerCase() as VerificationStatus) || 'pending';
+
+        // Resolve approval status: check isApprovedByAdmin, approvalStatus, and canGoOnline
+        const isFullyApproved =
+          response.isApprovedByAdmin === true ||
+          String(response.approvalStatus || '').toUpperCase() === 'APPROVED' ||
+          response.onboardingStatus?.canGoOnline === true;
+
+        const verificationStatus: VerificationStatus = isFullyApproved
+          ? 'approved'
+          : String(response.approvalStatus || '').toUpperCase() === 'REJECTED'
+          ? 'rejected'
+          : 'pending';
 
         await login(
           sanitizePhone(response.phoneNumber || phone),

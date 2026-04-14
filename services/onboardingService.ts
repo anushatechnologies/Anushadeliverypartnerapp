@@ -54,11 +54,15 @@ export const onboardingService = {
       fcmToken: fcmToken || undefined,
     });
 
-    if (!signupRes.jwtToken) {
+    const accessToken = signupRes.accessToken || signupRes.jwtToken || signupRes.token;
+    if (!accessToken) {
       throw new Error('Signup succeeded but JWT token was missing, so document upload could not start.');
     }
 
-    await AsyncStorage.setItem('@anusha_jwt_token', signupRes.jwtToken);
+    await AsyncStorage.setItem('@anusha_jwt_token', accessToken);
+    if (signupRes.refreshToken) {
+      await AsyncStorage.setItem('@anusha_refresh_token', signupRes.refreshToken);
+    }
 
     const deliveryPersonId = signupRes.deliveryPersonId;
     const uploadJobs: Array<{
@@ -129,7 +133,7 @@ export const onboardingService = {
       vehicleType: form.vehicleType,
       isEV,
       uploadCount: uploadJobs.length,
-      hasJwtToken: Boolean(signupRes.jwtToken),
+      hasJwtToken: Boolean(accessToken),
     });
 
     for (const job of uploadJobs) {
@@ -146,7 +150,7 @@ export const onboardingService = {
           job.documentType,
           job.documentNumber,
           job.fileUri,
-          signupRes.jwtToken,
+          accessToken,
         );
       } catch (error: any) {
         const reason =

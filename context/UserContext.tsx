@@ -106,7 +106,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             .catch(async (e) => {
               // Only logout if the server explicitly rejects the token (401)
               if (e?.response?.status === 401) {
-                await AsyncStorage.multiRemove(['@anusha_jwt_token', STORAGE_KEYS.PROFILE_STATE]);
+                await AsyncStorage.multiRemove(['@anusha_jwt_token', '@anusha_refresh_token', STORAGE_KEYS.PROFILE_STATE]);
                 setAuthState({ user: null, verificationStatus: null, isLoggedIn: false, isLoading: false });
               }
               // Any other error (network, timeout) — keep the user logged in
@@ -164,7 +164,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
           } catch (e: any) {
             if (e?.response?.status === 401) {
               // Token explicitly rejected — clear and show login
-              await AsyncStorage.multiRemove(['@anusha_jwt_token', STORAGE_KEYS.PROFILE_STATE]);
+              await AsyncStorage.multiRemove(['@anusha_jwt_token', '@anusha_refresh_token', STORAGE_KEYS.PROFILE_STATE]);
             } else {
               // Network/server error — keep token, show login UI with message
               console.warn("Session restore: network unavailable, will retry on next launch");
@@ -207,22 +207,31 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     };
     await persistProfile(newState);
   };
-
   const logout = async () => {
     try {
+      // 1. Revoke on server if refresh token exists
+      const refreshToken = await AsyncStorage.getItem('@anusha_refresh_token');
+      if (refreshToken) {
+        await authService.logout(refreshToken).catch(() => {});
+      }
+
+      // 2. Local Firebase logout
       const firebase = require("firebase/compat/app").default;
       if (firebase) {
          require("firebase/compat/auth");
-         await firebase.auth().signOut();
+         await firebase.auth().signOut().catch(() => {});
       }
     } catch(e) {
-      console.warn("Logout Web Auth Error:", e);
+      console.warn("Logout Network/Firebase Error:", e);
     }
     
     try {
-      // Explicitly wipe state and storage independently so bypass logins also get correctly logged out
-      await AsyncStorage.removeItem(STORAGE_KEYS.PROFILE_STATE);
-      await AsyncStorage.removeItem('@anusha_jwt_token');
+      // 3. Explicitly wipe state and storage
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.PROFILE_STATE, 
+        '@anusha_jwt_token', 
+        '@anusha_refresh_token'
+      ]);
     } catch(e) {
       console.warn("AsyncStorage Purge Error:", e);
     }

@@ -1,22 +1,62 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../context/LanguageContext";
 import { StatusBar } from "expo-status-bar";
 import PremiumHeader from "../components/PremiumHeader";
+import { useUser } from "../context/UserContext";
+import { apiClient } from "../services/apiClient";
 
 export default function NotificationsScreen() {
   const router = useRouter();
   const { t } = useLanguage();
+  const { authState } = useUser();
+  const user = authState.user;
 
-  const notifications = [
-    { title: "Peak Hour Started!", desc: "Earn 20% extra on every order from 7 PM to 10 PM.", time: "2m ago", icon: "lightning-bolt", color: "#FF9F0A" },
-    { title: "Payout Processed", desc: "Your weekly earnings of ₹4,250 have been sent to your bank account.", time: "1h ago", icon: "bank-transfer", color: "#00C853" },
-    { title: "New Policy Update", desc: "Please review the updated delivery guidelines effective from next Monday.", time: "5h ago", icon: "file-document-outline", color: "#0E8A63" },
-    { title: "Congratulations!", desc: "You completed 50 deliveries this week. Gold Badge unlocked!", time: "1d ago", icon: "trophy", color: "#FFD700" },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [user?.id]);
+
+  const fetchNotifications = async () => {
+    setLoading(true);
+    try {
+      // 1. Try a standard notifications endpoint
+      let data = [];
+      try {
+        const res = await apiClient.get('/api/notifications');
+        data = res.data;
+      } catch (err1) {
+        // Fallback for user-specific endpoint
+        if (user?.id) {
+            const res2 = await apiClient.get(`/api/notifications/delivery-person/${user.id}`);
+            data = res2.data;
+        }
+      }
+
+      // Robust array extraction
+      const extractData = (d: any) => Array.isArray(d) ? d : d?.data && Array.isArray(d.data) ? d.data : d?.content && Array.isArray(d.content) ? d.content : [];
+      const notifs = extractData(data);
+
+      const mapped = notifs.map((n: any, index: number) => ({
+        id: n.id || index,
+        title: n.title || n.subject || n.heading || "Notification",
+        desc: n.message || n.body || n.content || n.description || "You have a new message.",
+        time: "Recently", // Ideally parsing n.createdAt or n.timestamp
+        icon: n.icon || "bell-ring-outline",
+        color: "#0E8A63"
+      }));
+      setNotifications(mapped);
+    } catch (error) {
+       console.log('Failed to fetch notifications', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -28,20 +68,29 @@ export default function NotificationsScreen() {
         />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-           {notifications.map((item, i) => (
-             <View key={i} style={styles.notifCard}>
-                <View style={[styles.iconBox, { backgroundColor: item.color + '15' }]}>
-                   <MaterialCommunityIcons name={item.icon as any} size={24} color={item.color} />
-                </View>
-                <View style={styles.notifInfo}>
-                   <View style={styles.notifHeader}>
-                      <Text style={styles.notifTitle}>{item.title}</Text>
-                      <Text style={styles.notifTime}>{item.time}</Text>
-                   </View>
-                   <Text style={styles.notifDesc}>{item.desc}</Text>
-                </View>
+           {loading ? (
+             <ActivityIndicator size="large" color="#0E8A63" style={{ marginTop: 50 }} />
+           ) : notifications.length === 0 ? (
+             <View style={{ alignItems: 'center', marginTop: 50 }}>
+               <MaterialCommunityIcons name="bell-off-outline" size={48} color="#D1D5DB" />
+               <Text style={{ marginTop: 16, fontSize: 16, color: '#6B7280', fontWeight: '600' }}>No notifications yet</Text>
              </View>
-           ))}
+           ) : (
+             notifications.map((item, i) => (
+               <View key={item.id || i} style={styles.notifCard}>
+                  <View style={[styles.iconBox, { backgroundColor: item.color + '15' }]}>
+                     <MaterialCommunityIcons name={item.icon as any} size={24} color={item.color} />
+                  </View>
+                  <View style={styles.notifInfo}>
+                     <View style={styles.notifHeader}>
+                        <Text style={styles.notifTitle}>{item.title}</Text>
+                        <Text style={styles.notifTime}>{item.time}</Text>
+                     </View>
+                     <Text style={styles.notifDesc}>{item.desc}</Text>
+                  </View>
+               </View>
+             ))
+           )}
         </ScrollView>
       </SafeAreaView>
     </View>

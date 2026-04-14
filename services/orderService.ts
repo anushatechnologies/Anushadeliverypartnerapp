@@ -1,9 +1,131 @@
 import { apiClient } from './apiClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const orderService = {
-  // ─── List-based order queries ────────────────────────────────────────────────
+  // ─── PREFERRED: /api/delivery-app/orders/* ────────────────────────────────
+  // These use the JWT bearer token to auto-identify the rider — no ID needed.
 
-  /** GET /api/delivery-orders/delivery-person/{id} — All orders for a delivery person */
+  /**
+   * GET /api/delivery-app/available-orders
+   * Returns currently broadcasted orders the rider can accept.
+   */
+  getAvailableOrders: async () => {
+    const res = await apiClient.get('/api/delivery-app/available-orders');
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery-app/orders/{orderId}/accept
+   * Accept an available order using its numeric ID (preferred route).
+   */
+  acceptOrderFromApp: async (orderId: number | string) => {
+    const res = await apiClient.post(`/api/delivery-app/orders/${orderId}/accept`);
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery-app/orders/{orderId}/reject
+   * Reject an available order using its numeric ID (preferred route).
+   */
+  rejectOrderFromApp: async (orderId: number | string, reason: string) => {
+    // Some backends expect reason as a query param, some as a body. We send both.
+    const res = await apiClient.post(`/api/delivery-app/orders/${orderId}/reject?reason=${encodeURIComponent(reason)}`, { reason });
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery-app/orders/{orderNumber}/arrived
+   * Mark that the rider has arrived at the store/pickup location.
+   */
+  arrivedAtStore: async (orderNumber: string) => {
+    const res = await apiClient.post(
+      `/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/arrived`,
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery-app/orders/{orderNumber}/picked-up
+   * Confirm pickup from the store using the store's pickup OTP.
+   */
+  pickedUpWithOtp: async (orderNumber: string, otp: string) => {
+    const res = await apiClient.post(
+      `/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/picked-up`,
+      { otp },
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery-app/orders/{orderNumber}/generate-delivery-otp
+   * Generates a customer-facing delivery OTP and sends it via SMS.
+   * Returns { success, message, otp }.
+   */
+  generateDeliveryOtp: async (orderNumber: string) => {
+    const res = await apiClient.post(
+      `/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/generate-delivery-otp`,
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery-app/orders/{orderNumber}/confirm-delivery  (multipart)
+   * Verifies customer OTP, optionally uploads a delivery photo, marks order DELIVERED.
+   * This is the PREFERRED final delivery endpoint.
+   */
+  confirmDeliveryWithPhoto: async (orderNumber: string, otp: string, photoUri?: string) => {
+    const formData = new FormData();
+    formData.append('otp', otp);
+    if (photoUri) {
+      const filename = photoUri.split('/').pop() ?? 'delivery.jpg';
+      formData.append('photo', { uri: photoUri, name: filename, type: 'image/jpeg' } as any);
+    }
+    
+    const token = await AsyncStorage.getItem('@anusha_jwt_token');
+    const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
+    const init: RequestInit = {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    };
+
+    const response = await fetch(`${BASE_URL}/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/confirm-delivery`, init);
+    const data = await response.json();
+
+    if (!response.ok) {
+       throw new Error(data?.message || 'Failed to confirm delivery');
+    }
+    return data;
+  },
+
+  /**
+   * POST /api/delivery-app/orders/{orderNumber}/delivered
+   * Legacy shortcut: mark as delivered without photo proof.
+   * Use confirmDeliveryWithPhoto instead when possible.
+   */
+  markDelivered: async (orderNumber: string) => {
+    const res = await apiClient.post(
+      `/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/delivered`,
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/delivery-app/location — rider GPS ping (idle or active)
+   * Called every 30 s by locationService.startTracking().
+   */
+  updateRiderLocation: async (lat: number, lng: number) => {
+    const res = await apiClient.post('/api/delivery-app/location', { lat, lng });
+    return res.data;
+  },
+
+  // ─── LEGACY: /api/delivery-orders/* ─────────────────────────────────────
+  // Used for order lists, statistics, and OTP flows still in use.
+
+  /** GET /api/delivery-orders/delivery-person/{id} — All orders */
   getOrders: async (deliveryPersonId: number) => {
     const res = await apiClient.get(`/api/delivery-orders/delivery-person/${deliveryPersonId}`);
     return res.data;
@@ -23,17 +145,19 @@ export const orderService = {
 
   /** GET /api/delivery-orders/delivery-person/{id}/recent?limit={n} */
   getRecentOrders: async (deliveryPersonId: number, limit: number = 5) => {
-    const res = await apiClient.get(`/api/delivery-orders/delivery-person/${deliveryPersonId}/recent?limit=${limit}`);
+    const res = await apiClient.get(
+      `/api/delivery-orders/delivery-person/${deliveryPersonId}/recent?limit=${limit}`,
+    );
     return res.data;
   },
 
   /** GET /api/delivery-orders/delivery-person/{id}/statistics */
   getStatistics: async (deliveryPersonId: number) => {
-    const res = await apiClient.get(`/api/delivery-orders/delivery-person/${deliveryPersonId}/statistics`);
+    const res = await apiClient.get(
+      `/api/delivery-orders/delivery-person/${deliveryPersonId}/statistics`,
+    );
     return res.data;
   },
-
-  // ─── Single-order lookup ─────────────────────────────────────────────────────
 
   /** GET /api/delivery-orders/{id} — By numeric ID */
   getOrderById: async (id: number) => {
@@ -47,13 +171,15 @@ export const orderService = {
     return res.data;
   },
 
-  // ─── Accept / Reject ─────────────────────────────────────────────────────────
-
-  /** POST /api/delivery-orders/{orderNumber}/accept */
+  /**
+   * POST /api/delivery-orders/{orderNumber}/accept
+   * Legacy accept — requires explicit deliveryPersonId in body.
+   * Prefer acceptOrderFromApp() for JWT-based rider flows.
+   */
   acceptOrder: async (orderNumber: string, deliveryPersonId: number) => {
     const res = await apiClient.post(
       `/api/delivery-orders/${encodeURIComponent(orderNumber)}/accept`,
-      { deliveryPersonId }
+      { deliveryPersonId },
     );
     return res.data;
   },
@@ -62,23 +188,24 @@ export const orderService = {
   rejectOrder: async (orderNumber: string, deliveryPersonId: number, reason: string) => {
     const res = await apiClient.post(
       `/api/delivery-orders/${encodeURIComponent(orderNumber)}/reject`,
-      { deliveryPersonId, reason }
+      { deliveryPersonId, reason },
     );
     return res.data;
   },
 
-  // ─── Live GPS Location ───────────────────────────────────────────────────────
-
-  /** POST /api/delivery-orders/{orderNumber}/update-location — Triggered every 5 secs */
+  /**
+   * POST /api/delivery-orders/{orderNumber}/update-location
+   * Live GPS push for an active order (also writes to Firebase RTDB via backend).
+   */
   updateLocation: async (orderNumber: string, deliveryPersonId: number, lat: number, lng: number) => {
     const res = await apiClient.post(
       `/api/delivery-orders/${encodeURIComponent(orderNumber)}/update-location`,
-      { deliveryPersonId, lat, lng }
+      { deliveryPersonId, lat, lng },
     );
     return res.data;
   },
 
-  // ─── OTP & Fulfillment ───────────────────────────────────────────────────────
+  // ─── Legacy OTP / Fulfillment ────────────────────────────────────────────
 
   /** POST /api/delivery-orders/verify-pickup-otp */
   verifyPickupOtp: async (orderNumber: string, otp: string) => {
@@ -104,64 +231,9 @@ export const orderService = {
     return res.data;
   },
 
-  // ─── Phase 7 — Delivery OTP + Photo ─────────────────────────────────────────
-
-  /** POST /api/delivery-app/orders/{orderNumber}/generate-delivery-otp */
-  generateDeliveryOtp: async (orderNumber: string) => {
-    const res = await apiClient.post(
-      `/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/generate-delivery-otp`,
-    );
-    return res.data;
-  },
-
-  /**
-   * POST /api/delivery-app/orders/{orderNumber}/confirm-delivery  (multipart)
-   * Verifies customer OTP, uploads delivery photo, marks DELIVERED.
-   */
-  confirmDeliveryWithPhoto: async (orderNumber: string, otp: string, photoUri?: string) => {
-    const formData = new FormData();
-    formData.append('otp', otp);
-    if (photoUri) {
-      const filename = photoUri.split('/').pop() ?? 'delivery.jpg';
-      formData.append('photo', { uri: photoUri, name: filename, type: 'image/jpeg' } as any);
-    }
-    const res = await apiClient.post(
-      `/api/delivery-app/orders/${encodeURIComponent(orderNumber)}/confirm-delivery`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
-    );
-    return res.data;
-  },
-
-  /** POST /api/delivery-app/location — rider GPS ping (no active order) */
-  updateRiderLocation: async (lat: number, lng: number) => {
-    const res = await apiClient.post('/api/delivery-app/location', { lat, lng });
-    return res.data;
-  },
-
-  // ─── Cancel / Report ─────────────────────────────────────────────────────────
-
   /** POST /api/delivery-orders/{orderId}/cancel */
   cancelOrder: async (orderId: number, reason: string) => {
     const res = await apiClient.post(`/api/delivery-orders/${orderId}/cancel`, { reason });
-    return res.data;
-  },
-
-  // ─── Admin / System ──────────────────────────────────────────────────────────
-
-  /**
-   * POST /api/delivery-orders
-   * Create a new delivery order (admin/system use).
-   */
-  createDeliveryOrder: async (data: {
-    orderNumber: string;
-    deliveryPersonId: number;
-    customerName: string;
-    customerPhone: string;
-    deliveryAddress: string;
-    [key: string]: any; // allow extra optional fields
-  }) => {
-    const res = await apiClient.post('/api/delivery-orders', data);
     return res.data;
   },
 };

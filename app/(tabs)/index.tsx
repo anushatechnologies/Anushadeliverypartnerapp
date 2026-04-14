@@ -73,6 +73,7 @@ export default function Home() {
   
   // Rejected Orders History
   const [rejectedOrders, setRejectedOrders] = useState<{ id: string, reason: string, time: string }[]>([]);
+  const ignoredOrderIdsRef = useRef<Set<string>>(new Set());
   
   const fetchDashboard = async () => {
     if (!user?.id) return;
@@ -141,9 +142,9 @@ export default function Home() {
     if (!messaging || !user?.id) return;
     const unsubscribe = messaging().onMessage(async (remoteMessage: any) => {
       const data = remoteMessage.data ?? {};
-      const msgType = data.type;
+      const msgType = data.type || data.notificationType;
 
-      if (msgType === 'NEW_DELIVERY_ORDER' && active) {
+      if ((msgType === 'NEW_DELIVERY_ORDER' || msgType === 'ORDER_ASSIGNED' || msgType === 'ASSIGNED') && active) {
         // A new order was broadcasted — show the accept/reject popup
         setIncomingOrder({
           id: data.orderId ?? '',
@@ -173,23 +174,77 @@ export default function Home() {
     const interval = setInterval(async () => {
        if (active && user?.id) {
           try {
-             // 1. POLLING FOR NEW ASSIGNED ORDER (fallback when FCM is unavailable)
-             const activeOrders = await orderService.getActiveOrders(user.id);
+             // 1. POLLING FOR NEW ASSIGNED ORDER
+             const [rawActive, rawAvailable, rawAll] = await Promise.all([
+                 orderService.getActiveOrders(user.id).catch(() => []),
+                 orderService.getAvailableOrders().catch(() => []),
+                 orderService.getOrders(user.id).catch(() => [])
+             ]);
 
-             if (activeOrders && activeOrders.length > 0) {
-                const newPotential = activeOrders.find((o: any) => o.status === 'BROADCASTED_TO_RIDERS' || o.status === 'RIDER_ASSIGNED' && !o.acceptedAt);
-                if (newPotential && !incomingOrder) {
-                   setIncomingOrder({
-                      id: newPotential.id.toString(),
-                      vendor: newPotential.store?.name ?? newPotential.vendorName ?? "Unknown Store",
-                      location: newPotential.deliveryAddress ?? newPotential.customerAddress ?? "Customer Location",
-                      distance: newPotential.distanceKm ? `${Number(newPotential.distanceKm).toFixed(1)} km` : "—",
-                      earnings: `₹${newPotential.deliveryFee ?? newPotential.estimateEarnings ?? '—'}`,
-                      orderNumber: newPotential.orderNumber
-                   });
-                   playAlarm();
-                }
+             const extractArr = (resp: any) => {
+               if (Array.isArray(resp)) return resp;
+               if (resp && typeof resp === 'object') {
+                 const arrs = Object.values(resp).filter(Array.isArray);
+                 if (arrs.length > 0) return arrs[0];
+               }
+               return [];
+             };
+             const activeOrders = extractArr(rawActive);
+             const availableOrders = extractArr(rawAvailable);
+             const allOrders = extractArr(rawAll);
 
+             // Check availableOrders first, then activeOrders, then allOrders for unaccepted assignments
+             const findPotential = (arr: any[]) => {
+               if (!Array.isArray(arr)) return null;
+               return arr.find((o: any) => {
+                 const idStr = o.id?.toString() || o.orderId?.toString();
+                 if (ignoredOrderIdsRef.current.has(idStr)) return false;
+                 
+                 // Skip orders that are already being worked on (accepted, picked up, etc.)
+                 const alreadyActiveStatuses = [
+                   'RIDER_ASSIGNED', 'REACHED_STORE', 'PICKED_UP', 
+                   'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED'
+                 ];
+                 if (alreadyActiveStatuses.includes(o.status)) return false;
+                 
+                 // Only show popup for genuinely new/unaccepted orders
+                 return o.status === 'BROADCASTED_TO_RIDERS' || 
+                        o.status === 'PENDING' ||
+                        ((o.status === 'ASSIGNED' || o.status === 'ORDER_ASSIGNED') && !o.acceptedAt);
+               });
+             };
+
+             const newPotential = findPotential(availableOrders) || findPotential(activeOrders) || findPotential(allOrders);
+
+             if (newPotential && !incomingOrder) {
+                // Extract store/vendor info using same comprehensive fallbacks as orders.tsx
+                const storeObj = newPotential.store || newPotential.vendor || newPotential.merchant || {};
+                const vendorName = storeObj.name || storeObj.storeName || storeObj.vendorName 
+                  || newPotential.vendorName || newPotential.storeName || newPotential.merchantName
+                  || newPotential.pickup?.name || newPotential.pickupName || "Unknown Store";
+                
+                // Extract customer/delivery address
+                const custObj = newPotential.customer || newPotential.user || newPotential.buyer || {};
+                const deliveryAddress = (typeof custObj === 'object' ? (custObj.address || custObj.deliveryAddress || custObj.customerAddress) : null)
+                  || newPotential.deliveryAddress || newPotential.address || newPotential.customerAddress
+                  || newPotential.dropoff?.address || newPotential.dropoffAddress || "Unknown Address";
+
+                const rawOrderNumber = newPotential.orderNumber?.toString() || '';
+                const rawId = newPotential.id?.toString() || newPotential.orderId?.toString() || '';
+                const orderNumber = (rawOrderNumber && rawOrderNumber !== rawId) ? rawOrderNumber : rawId;
+
+                setIncomingOrder({
+                   id: rawId,
+                   vendor: vendorName,
+                   location: deliveryAddress,
+                   distance: newPotential.distanceKm ? `${Number(newPotential.distanceKm).toFixed(1)} km` : (newPotential.distance ? newPotential.distance : "—"),
+                   earnings: `₹${newPotential.deliveryFee ?? newPotential.estimateEarnings ?? newPotential.amount ?? newPotential.earnings ?? '0'}`,
+                   orderNumber: orderNumber
+                });
+                playAlarm();
+             }
+
+             if (Array.isArray(activeOrders) && activeOrders.length > 0) {
                 // 2. RTDB live location for active orders
                 const activeOrder = activeOrders.find((o: any) =>
                   o.status === 'RIDER_ASSIGNED' || o.status === 'REACHED_STORE' ||
@@ -230,17 +285,75 @@ export default function Home() {
     if (!incomingOrder) return;
     setLoading(true);
     await stopAlarm();
-    try {
-       await orderService.acceptOrder(incomingOrder.orderNumber || incomingOrder.id, user!.id!);
-       Alert.alert("Order Accepted!", "The order has been moved to your Active Tasks.");
-       setIncomingOrder(null);
-       fetchDashboard(); // Refresh stats
-       router.push("/(tabs)/orders");
-    } catch (e: any) {
-       Alert.alert("Failed", "Could not accept order. It might have been assigned to someone else.");
-    } finally {
-       setLoading(false);
+
+    const orderId = incomingOrder.id;           // numeric string e.g. "42"
+    const orderNumber = incomingOrder.orderNumber; // string e.g. "ORD-00042" or same as orderId if unavailable
+    const hasRealOrderNumber = orderNumber && orderNumber !== orderId;
+
+    console.log(`[ORDER] Accept — id: "${orderId}", orderNumber: "${orderNumber}", hasRealOrderNumber: ${hasRealOrderNumber}, userId: ${user?.id}`);
+
+    // Build strategy list in priority order
+    const strategies: Array<{ label: string; fn: () => Promise<any> }> = [];
+
+    // PRIMARY: App API with numeric id — works for BROADCASTED_TO_RIDERS orders
+    if (orderId) {
+      strategies.push({
+        label: `App API (id=${orderId})`,
+        fn: () => orderService.acceptOrderFromApp(orderId),
+      });
     }
+
+    // If the order has a real orderNumber string (already assigned), also try:
+    if (hasRealOrderNumber) {
+      // App API with the string orderNumber
+      strategies.push({
+        label: `App API (orderNumber=${orderNumber})`,
+        fn: () => orderService.acceptOrderFromApp(orderNumber!),
+      });
+      // Legacy API with the string orderNumber + deliveryPersonId
+      if (user?.id) {
+        strategies.push({
+          label: `Legacy API (orderNumber=${orderNumber})`,
+          fn: () => orderService.acceptOrder(orderNumber!, user.id!),
+        });
+      }
+    }
+
+    let lastError: any = null;
+
+    for (const strategy of strategies) {
+      try {
+        console.log(`[ORDER] Trying: ${strategy.label}`);
+        await strategy.fn();
+        console.log(`[ORDER] ✅ Success via ${strategy.label}`);
+        // CRITICAL: Mark this order as handled so polling never picks it up again
+        if (orderId) ignoredOrderIdsRef.current.add(orderId);
+        if (orderNumber && orderNumber !== orderId) ignoredOrderIdsRef.current.add(orderNumber);
+        Alert.alert("Order Accepted!", "The order has been moved to your Active Tasks.");
+        setIncomingOrder(null);
+        await stopAlarm();
+        fetchDashboard();
+        router.push("/(tabs)/orders");
+        setLoading(false);
+        return;
+      } catch (e: any) {
+        lastError = e;
+        const serverMsg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Unknown';
+        console.warn(`[ORDER] ❌ ${strategy.label} failed — ${serverMsg} (HTTP ${e?.response?.status})`);
+      }
+    }
+
+    // All failed — show exact backend reason
+    const serverMessage = lastError?.response?.data?.message
+      || lastError?.response?.data?.error
+      || lastError?.message
+      || 'Unknown error';
+    console.error("[ORDER] All strategies failed.", serverMessage);
+    Alert.alert(
+      "Failed",
+      `Could not accept order.\n\nReason: ${serverMessage}\n\nThe order may have already been assigned to another rider.`
+    );
+    setLoading(false);
   };
 
   const handleRejectOrderSubmit = async () => {
@@ -250,12 +363,27 @@ export default function Home() {
       return;
     }
     
-    if (!incomingOrder) return;
-    setLoading(true);
-    await stopAlarm();
-
+     if (!incomingOrder) return;
     try {
-      await orderService.rejectOrder(incomingOrder.orderNumber || incomingOrder.id, user!.id!, finalReason);
+      setLoading(true);
+      if (user?.id) {
+        // STRATEGY: Prioritize legacy API for rejection because Admin Panels are typically 
+        // hooked into the older /api/delivery-orders endpoints for notifications.
+        console.log(`[REJECT] Notifying Admin via legacy API for order ${incomingOrder.orderNumber}`);
+        await orderService.rejectOrder(incomingOrder.orderNumber || incomingOrder.id, user.id!, finalReason)
+          .catch(async (e) => {
+            console.warn("Legacy reject API failed, trying modern App API fallback", e?.response?.data || e.message);
+            // Fallback to modern App API if legacy fails
+            return orderService.rejectOrderFromApp(incomingOrder.id, finalReason);
+          });
+      }
+      // Track the ID in memory so we don't pick it up again on the next 15-second polling tick
+      ignoredOrderIdsRef.current.add(incomingOrder.id.toString());
+      
+      setIncomingOrder(null);
+      setShowRejectModal(false);
+      setRejectReason("");
+      setCustomRejectReason("");
       
       // Add to history
       setRejectedOrders(prev => [{
@@ -264,8 +392,6 @@ export default function Home() {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }, ...prev]);
       
-      setShowRejectModal(false);
-      setIncomingOrder(null);
       setRejectReason("");
       setCustomRejectReason("");
       Alert.alert("Order Rejected", "We have notified the admin.");
@@ -375,7 +501,7 @@ export default function Home() {
     <>
     <PremiumPopup {...popup} />
     <View style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <SafeAreaView style={styles.safe} edges={['top']}>
 
         {/* Clean Professional Header */}
@@ -412,14 +538,14 @@ export default function Home() {
               style={styles.headerIconBtn}
               onPress={() => setShowSupport(true)}
             >
-              <MaterialCommunityIcons name="face-agent" size={22} color="#0F172A" />
+              <MaterialCommunityIcons name="face-agent" size={22} color="#FFFFFF" />
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.headerIconBtn}
               onPress={() => router.push("/notifications")}
             >
-              <MaterialCommunityIcons name="bell-ring-outline" size={22} color="#0F172A" />
+              <MaterialCommunityIcons name="bell-ring-outline" size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -571,33 +697,112 @@ export default function Home() {
             </View>
           </View>
 
-          <View style={styles.statsRow}>
-            <StatCard
-              label={t('earnings')}
-              value={`₹${dashboard.totalEarnings.toFixed(2)}`}
-              icon="bank-outline"
-              color="#F59E0B"
-              colors={['#1E293B', '#0F172A']}
-              onPress={() => router.push("/(tabs)/earnings")}
-            />
-            <StatCard
-              label={t('activeOrders')}
-              value={dashboard.activeOrders.toString()}
-              icon="bike-fast"
-              color="#38BDF8"
-              colors={['#1E293B', '#0F172A']}
-              onPress={() => router.push("/(tabs)/orders")}
-            />
+          {/* Total Earnings Section */}
+          <View style={styles.earningsSection}>
+            <Text style={styles.earningsSectionTitle}>Total Earnings</Text>
+            <View style={styles.earningsCard}>
+              <View style={styles.earningsCardHeader}>
+                <Text style={styles.earningsMotivation}>Deliver Orders to Start Earning</Text>
+                <Text style={styles.earningsMotivationEmoji}>💰</Text>
+              </View>
+              <View style={styles.earningsStatsRow}>
+                {/* Login Hours */}
+                <TouchableOpacity 
+                  style={styles.earningsStatItem} 
+                  activeOpacity={0.7}
+                  onPress={() => router.push("/(tabs)/profile")}
+                >
+                  <View style={styles.earningsStatTop}>
+                    <Text style={styles.earningsStatEmoji}>⏱️</Text>
+                    <Text style={styles.earningsStatValue}>0</Text>
+                  </View>
+                  <View style={styles.earningsStatBottom}>
+                    <Text style={styles.earningsStatLabel}>Login Hrs</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color="#64748B" />
+                  </View>
+                </TouchableOpacity>
+
+                <View style={styles.earningsStatDivider} />
+
+                {/* Total Earnings */}
+                <TouchableOpacity
+                  style={styles.earningsStatItem}
+                  activeOpacity={0.7}
+                  onPress={() => router.push("/(tabs)/earnings")}
+                >
+                  <View style={styles.earningsStatTop}>
+                    <Text style={styles.earningsStatEmoji}>💸</Text>
+                    <Text style={[styles.earningsStatValue, { color: '#0E8A63' }]}>₹{Number(dashboard.totalEarnings || 0).toFixed(0)}</Text>
+                  </View>
+                  <View style={styles.earningsStatBottom}>
+                    <Text style={styles.earningsStatLabel}>Total Earnings</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color="#64748B" />
+                  </View>
+                </TouchableOpacity>
+
+                <View style={styles.earningsStatDivider} />
+
+                {/* Orders Done */}
+                <TouchableOpacity
+                  style={styles.earningsStatItem}
+                  activeOpacity={0.7}
+                  onPress={() => router.push("/(tabs)/orders")}
+                >
+                  <View style={styles.earningsStatTop}>
+                    <Text style={styles.earningsStatEmoji}>🛍️</Text>
+                    <Text style={styles.earningsStatValue}>{dashboard.activeOrders}</Text>
+                  </View>
+                  <View style={styles.earningsStatBottom}>
+                    <Text style={styles.earningsStatLabel}>Order Done</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color="#64748B" />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
 
-          {/* Quick Actions Removed Placeholders as requested */}
+          {/* Quick Actions */}
           <View style={styles.quickGrid}>
             <QuickAction icon="wallet-outline" label="Earnings" color="#0E8A63" bg="#F0FDF4" onPress={() => router.push("/(tabs)/earnings")} />
             <QuickAction icon="clipboard-text-outline" label="Orders" color="#10B981" bg="#ECFDF5" onPress={() => router.push("/(tabs)/orders")} />
             <QuickAction icon="headphones" label="Support" color="#EF4444" bg="#FEF2F2" onPress={() => setShowSupport(true)} />
-            <QuickAction icon="account-multiple-plus-outline" label="Refer & Earn" color="#F59E0B" bg="#FFFBEB" onPress={() => router.push("/refer")} />
           </View>
+
+          {/* Refer & Earn Banner */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push("/refer")}
+            style={styles.referBanner}
+          >
+            <View style={styles.referBannerLeft}>
+              <View style={styles.referIllustration}>
+                <View style={styles.referPhoneFrame}>
+                  <Text style={styles.referPhoneEmoji}>🧑‍💼</Text>
+                  <View style={styles.referQRBox}>
+                    <MaterialCommunityIcons name="qrcode" size={20} color="#1E293B" />
+                  </View>
+                </View>
+                {/* Floating coins */}
+                <Text style={[styles.referCoin, { top: -4, right: -8 }]}>🪙</Text>
+                <Text style={[styles.referCoin, { top: 16, left: -12 }]}>🪙</Text>
+                <Text style={[styles.referCoin, { bottom: 8, right: -14 }]}>🪙</Text>
+                <Text style={[styles.referCoin, { bottom: -2, left: -6 }]}>🪙</Text>
+                <Text style={[styles.referCoin, { top: 40, right: 4 }]}>🪙</Text>
+              </View>
+            </View>
+            <View style={styles.referBannerRight}>
+              <Text style={styles.referBannerTitle}>
+                Refer and earn upto{' '}
+                <Text style={styles.referBannerAmount}>₹19000</Text>
+                {' '}in your city
+              </Text>
+              <View style={styles.referBannerBtn}>
+                <Text style={styles.referBannerBtnText}>Refer friends at Anusha Delivery Partner</Text>
+                <MaterialCommunityIcons name="chevron-right" size={18} color="#FFFFFF" />
+              </View>
+            </View>
+          </TouchableOpacity>
 
 
         </ScrollView>
@@ -711,24 +916,7 @@ export default function Home() {
   );
 }
 
-function StatCard({ label, value, icon, color, colors, onPress }: { label: string, value: string, icon: any, color: string, colors: string[], onPress?: () => void }) {
-  return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.statCardContainer}>
-      <LinearGradient colors={colors as any} style={styles.statCardGradient}>
-        <Animated.View entering={FadeInDown.delay(100)}>
-          <View style={styles.statHeaderRow}>
-            <View style={[styles.statIconWrap, { backgroundColor: color + '20' }]}>
-              <MaterialCommunityIcons name={icon} size={22} color={color} />
-            </View>
-            <MaterialCommunityIcons name="chevron-right" size={18} color="rgba(255,255,255,0.3)" />
-          </View>
-          <Text style={styles.statValueText}>{value}</Text>
-          <Text style={styles.statLabelText}>{label}</Text>
-        </Animated.View>
-      </LinearGradient>
-    </TouchableOpacity>
-  );
-}
+// StatCard removed — replaced by inline EarningsSection
 
 function QuickAction({ icon, label, color, bg, onPress }: { icon: any, label: string, color: string, bg: string, onPress: () => void }) {
   return (
@@ -757,21 +945,21 @@ function SupportTile({ icon, label, desc, color, onPress }: { icon: any, label: 
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
-  safe: { flex: 1, backgroundColor: "#FFFFFF" },
-  homeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  container: { flex: 1, backgroundColor: "#0F172A" },
+  safe: { flex: 1, backgroundColor: "#0F172A" },
+  homeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#0F172A', borderBottomWidth: 0 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   groceryIconBox: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#0E8A63', justifyContent: 'center', alignItems: 'center' },
-  brandName: { fontSize: 16, fontWeight: '900', color: '#0F172A', letterSpacing: -0.3 },
-  headerGreeting: { fontSize: 12, color: '#64748B', fontWeight: '600', marginTop: 1 },
+  brandName: { fontSize: 16, fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.3 },
+  headerGreeting: { fontSize: 12, color: '#94A3B8', fontWeight: '600', marginTop: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerIconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
+  headerIconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   powerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 4 },
   powerBtnOnline: { backgroundColor: '#22C55E', shadowColor: '#22C55E' },
-  powerBtnOffline: { backgroundColor: '#F1F5F9', shadowColor: '#94A3B8' },
-  notifBadge: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: '#FFFFFF' },
+  powerBtnOffline: { backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#94A3B8' },
+  notifBadge: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: '#0F172A' },
 
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 100, paddingTop: 20, backgroundColor: '#F8FAFC' },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 100, paddingTop: 20, backgroundColor: '#0F172A' },
   carouselContainer: { marginBottom: 24, width: '100%' },
   autoBannerCard: { width: width - 36, height: 170, marginRight: 12, borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 12 },
   bannerImageBg: { width: '100%', height: '100%' },
@@ -787,13 +975,25 @@ const styles = StyleSheet.create({
   carouselDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E2E8F0' },
   carouselDotActive: { width: 24, height: 8, borderRadius: 4, backgroundColor: '#0E8A63' },
 
-  statsRow: { flexDirection: 'row', gap: 14, marginBottom: 24, marginTop: 8 },
-  statCardContainer: { flex: 1, borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
-  statCardGradient: { padding: 18, minHeight: 140 },
-  statHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  statIconWrap: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  statValueText: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.5 },
-  statLabelText: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 4 },
+  // ── Total Earnings Section ──
+  earningsSection: { marginBottom: 24, marginTop: 8, borderRadius: 20, overflow: 'hidden', backgroundColor: '#1E293B', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
+  earningsSectionTitle: { fontSize: 18, fontWeight: '900', color: '#A78BFA', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 12, letterSpacing: -0.3 },
+  earningsCard: { backgroundColor: '#FFFFFF', borderRadius: 18, marginHorizontal: 12, marginBottom: 14, paddingTop: 20, paddingBottom: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
+  earningsCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 18 },
+  earningsMotivation: { fontSize: 17, fontWeight: '800', color: '#1E293B', flex: 1, letterSpacing: -0.3 },
+  earningsMotivationEmoji: { fontSize: 28 },
+  earningsStatsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
+  earningsStatItem: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  earningsStatItemCenter: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  earningsStatTop: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  earningsStatEmoji: { fontSize: 22 },
+  earningsStatValue: { fontSize: 20, fontWeight: '900', color: '#1E293B' },
+  earningsStatBottom: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  earningsStatLabel: { fontSize: 12, fontWeight: '700', color: '#7C3AED' },
+  earningsStatDivider: { width: 1, height: 40, backgroundColor: '#E2E8F0', marginHorizontal: 4 },
+  totalEarningsBadge: { backgroundColor: '#1E293B', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6 },
+  totalEarningsBadgeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  totalEarningsValue: { fontSize: 16, fontWeight: '900', color: '#0E8A63' },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, marginTop: 8 },
   sectionTitle: { color: '#0F172A', fontSize: 18, fontWeight: '900', letterSpacing: -0.5 },
@@ -809,10 +1009,24 @@ const styles = StyleSheet.create({
   demandText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14, letterSpacing: -0.2 },
   mapExpandBtn: { position: 'absolute', bottom: 12, right: 12, width: 48, height: 48, borderRadius: 16, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6 },
 
-  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 30 },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 20 },
   quickActionTile: { width: (width - 54) / 2, borderRadius: 22, padding: 18, alignItems: 'center', gap: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
   quickActionIconBox: { width: 52, height: 52, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   quickActionLabel: { color: '#0F172A', fontSize: 14, fontWeight: '800' },
+
+  // ── Refer & Earn Banner ──
+  referBanner: { flexDirection: 'row', backgroundColor: '#FFF8EC', borderRadius: 20, overflow: 'hidden', marginBottom: 30, elevation: 4, shadowColor: '#D97706', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8, borderWidth: 1.5, borderColor: '#FDECC8' },
+  referBannerLeft: { width: 120, justifyContent: 'center', alignItems: 'center', paddingVertical: 16, paddingLeft: 12 },
+  referIllustration: { width: 90, height: 100, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  referPhoneFrame: { width: 64, height: 82, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#6366F1', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3 },
+  referPhoneEmoji: { fontSize: 28, marginBottom: 4 },
+  referQRBox: { backgroundColor: '#F1F5F9', borderRadius: 6, padding: 4 },
+  referCoin: { position: 'absolute', fontSize: 16 },
+  referBannerRight: { flex: 1, paddingVertical: 18, paddingRight: 16, paddingLeft: 8, justifyContent: 'center' },
+  referBannerTitle: { fontSize: 16, fontWeight: '700', color: '#1E293B', lineHeight: 23, marginBottom: 12 },
+  referBannerAmount: { fontSize: 20, fontWeight: '900', color: '#B45309' },
+  referBannerBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#A0522D', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, alignSelf: 'flex-start', gap: 4 },
+  referBannerBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.8)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 40, borderTopRightRadius: 40, padding: 28, paddingBottom: 48 },

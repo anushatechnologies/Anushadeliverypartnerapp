@@ -21,6 +21,7 @@ import { useUser } from "../../context/UserContext";
 import { payoutService } from "../../services/payoutService";
 import { profileService } from "../../services/profileService";
 import { orderService } from "../../services/orderService";
+import { LineChart } from "react-native-chart-kit";
 
 const { width } = Dimensions.get("window");
 
@@ -31,6 +32,8 @@ export default function Earnings() {
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [payoutSuccess, setPayoutSuccess] = useState(false);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
+  
+  const [activeTab, setActiveTab] = useState("Weekly");
 
   const { authState } = useUser();
   const user = authState.user;
@@ -80,63 +83,114 @@ export default function Earnings() {
     { label: "No Recent Payouts", amount: "₹0", orders: 0, status: 'NONE' },
   ];
 
+  // Graphical Chart Data
+  const chartData = {
+    labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    datasets: [{
+      data: stats.totalEarnings > 0 
+        ? [0, 0, 0, 0, 0, 0, stats.totalEarnings] 
+        : [0, 0, 0, 0, 0, 0, 0],
+      strokeWidth: 3,
+    }]
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safe} edges={['top']}>
         <PremiumHeader 
-          title={t('earnings')}
+          title={""}
           rightContent={
             <TouchableOpacity onPress={() => Alert.alert("Coming Soon", "Withdrawal feature is coming soon! Stay tuned for updates.")} style={[styles.payoutBtn, { backgroundColor: '#94A3B8' }]}>
-               <Text style={styles.payoutBtnText}>Coming Soon</Text>
+               <Text style={styles.payoutBtnText}>Withdraw</Text>
             </TouchableOpacity>
           }
         />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           
-          {/* Main Earnings Card */}
-          <Animated.View entering={FadeInDown.duration(600)} style={styles.mainCard}>
-              <View style={styles.cardHeader}>
-                <View>
-                   <Text style={styles.cardLabel}>All-Time Earnings</Text>
-                   <Text style={styles.cardValue}>₹{stats.totalEarnings.toFixed(2)}</Text>
-                </View>
-                <View style={styles.periodBadge}>
-                   <MaterialCommunityIcons name="calendar-range" size={14} color="#0E8A63" />
-                   <Text style={styles.periodText}>Lifetime</Text>
-                </View>
+          <Animated.View entering={FadeInDown.duration(600)} style={styles.chartSection}>
+             <Text style={styles.topLabel}>Total Earnings</Text>
+             <Text style={styles.topValue}>₹{(stats.totalEarnings ?? 0).toFixed(0)}</Text>
+
+             <View style={styles.togglePillContainer}>
+                <TouchableOpacity 
+                   style={[styles.toggleBtn, activeTab === 'Weekly' && styles.toggleBtnActive]} 
+                   onPress={() => setActiveTab('Weekly')}
+                >
+                   <Text style={[styles.toggleText, activeTab === 'Weekly' && styles.toggleTextActive]}>Weekly</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                   style={[styles.toggleBtn, activeTab === 'Monthly' && styles.toggleBtnActive]} 
+                   onPress={() => setActiveTab('Monthly')}
+                >
+                   <Text style={[styles.toggleText, activeTab === 'Monthly' && styles.toggleTextActive]}>Monthly</Text>
+                </TouchableOpacity>
              </View>
 
-             <View style={styles.divider} />
+             <View style={styles.chartWrapper}>
+               <LineChart
+                  data={chartData}
+                  width={width - 48} // container padding
+                  height={140}
+                  withDots={true}
+                  withInnerLines={false}
+                  withOuterLines={false}
+                  withVerticalLabels={false}
+                  withHorizontalLabels={false}
+                  yAxisInterval={1}
+                  chartConfig={{
+                    backgroundColor: "#FFFFFF",
+                    backgroundGradientFrom: "#FFFFFF",
+                    backgroundGradientTo: "#FFFFFF",
+                    decimalPlaces: 0,
+                    color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                    fillShadowGradientFrom: "#10B981",
+                    fillShadowGradientFromOpacity: 0.15,
+                    fillShadowGradientTo: "#FFFFFF",
+                    fillShadowGradientToOpacity: 0.0,
+                    propsForDots: {
+                      r: "4",
+                      strokeWidth: "2",
+                      stroke: "#10B981",
+                      fill: "#FFFFFF"
+                    }
+                  }}
+                  bezier
+                  style={styles.chartStyle}
+               />
+             </View>
 
-             <View style={styles.statsGrid}>
-                <View style={styles.statItem}>
-                   <Text style={styles.statSubValue}>{stats.completedOrders}</Text>
-                   <Text style={styles.statSubLabel}>Orders</Text>
+             <View style={styles.dividerLight} />
+
+             <View style={styles.statsRow}>
+                <View style={styles.statBox}>
+                   <Text style={styles.statVal}>{stats.completedOrders ?? 0}</Text>
+                   <Text style={styles.statLab}>Orders</Text>
                 </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                   <Text style={styles.statSubValue}>Level 1</Text>
-                   <Text style={styles.statSubLabel}>Tier</Text>
+                <View style={styles.vertDivider} />
+                <View style={styles.statBox}>
+                   <Text style={styles.statVal}>0h 0m</Text>
+                   <Text style={styles.statLab}>Time Online</Text>
                 </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                   <Text style={styles.statSubValue}>₹0</Text>
-                   <Text style={styles.statSubLabel}>Bonus</Text>
+                <View style={styles.vertDivider} />
+                <View style={styles.statBox}>
+                   <Text style={styles.statVal}>₹0</Text>
+                   <Text style={styles.statLab}>Bonus</Text>
                 </View>
              </View>
           </Animated.View>
 
-          {/* Rate Card Removed as requested */}
-
-          {/* Collapsible Earnings History */}
-          <TouchableOpacity onPress={() => setShowHistory(!showHistory)} style={styles.collapsibleHeader}>
+          {/* History Mockup Block */}
+          <TouchableOpacity onPress={() => setShowHistory(!showHistory)} style={styles.mockupHistoryTile}>
              <View style={styles.row}>
-                <MaterialCommunityIcons name="history" size={24} color="#0E8A63" />
-                <Text style={styles.collapsibleTitle}>{t('history')}</Text>
+                <View style={styles.greenCircle}>
+                   <MaterialCommunityIcons name="star-four-points" size={16} color="#FFFFFF" />
+                </View>
+                <Text style={styles.historyTileTitle}>Order History</Text>
              </View>
-             <MaterialCommunityIcons name={showHistory ? "chevron-up" : "chevron-down"} size={24} color="#A0A0A0" />
+             <MaterialCommunityIcons name={showHistory ? "chevron-up" : "chevron-right"} size={22} color="#1E293B" />
           </TouchableOpacity>
 
           {showHistory && (
@@ -152,23 +206,21 @@ export default function Earnings() {
                 ))}
              </Animated.View>
           )}
-
-          <TouchableOpacity onPress={() => setShowPayouts(!showPayouts)} style={[styles.collapsibleHeader, { marginTop: 12 }]}>
-             <View style={styles.row}>
-                <MaterialCommunityIcons name="bank-transfer" size={24} color="#00C853" />
-                <Text style={styles.collapsibleTitle}>Payout Settlements</Text>
+          
+          {/* Default Payout Block */}
+          <TouchableOpacity onPress={() => setShowPayouts(!showPayouts)} style={styles.mockupPayoutTile}>
+             <View style={styles.payoutLeft}>
+                 <View style={styles.greenBriefcase}>
+                    <MaterialCommunityIcons name="briefcase" size={16} color="#FFFFFF" />
+                 </View>
+                 <View>
+                    <Text style={styles.payoutTileTitle}>Next Payout</Text>
+                    <Text style={styles.payoutTileSub}>Scheduled for</Text>
+                    <Text style={styles.payoutTileSub}>Tuesday 8.00 AM</Text>
+                 </View>
              </View>
-             <MaterialCommunityIcons name={showPayouts ? "chevron-up" : "chevron-down"} size={24} color="#A0A0A0" />
+             <Text style={styles.payoutTileAmount}>₹{(stats.totalEarnings ?? 0).toFixed(0)}</Text>
           </TouchableOpacity>
-
-          {showPayouts && (
-             <Animated.View entering={FadeInDown} style={styles.payoutContent}>
-                <View style={styles.payoutStatusCard}>
-                   <MaterialCommunityIcons name="check-circle" size={20} color="#00C853" />
-                   <Text style={styles.payoutStatusText}>Next settlement scheduled for Monday, 8:00 AM</Text>
-                </View>
-             </Animated.View>
-          )}
 
         </ScrollView>
       </SafeAreaView>
@@ -219,37 +271,47 @@ function TouchableOpacity(props: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   safe: { flex: 1, backgroundColor: "#FFFFFF" },
-  // Header styles removed as we are using PremiumHeader
-  payoutBtn: { backgroundColor: '#0A6A4C', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, shadowColor: '#0A6A4C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  payoutBtn: { backgroundColor: '#0A6A4C', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   payoutBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 68, paddingTop: 24, backgroundColor: '#F8FAFC', borderTopLeftRadius: 32, borderTopRightRadius: 32 },
-  mainCard: { backgroundColor: '#ECFDF5', borderRadius: 28, padding: 24, shadowColor: '#0A6A4C', shadowOffset: { width: 0, height: 15 }, shadowOpacity: 0.08, shadowRadius: 30, elevation: 8, marginBottom: 32, borderWidth: 1, borderColor: 'rgba(79,70,229,0.1)' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardLabel: { color: '#0A6A4C', fontSize: 14, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardValue: { color: '#0F172A', fontSize: 34, fontWeight: '900', marginTop: 4 },
-  periodBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(79,70,229,0.1)' },
-  periodText: { color: '#0A6A4C', fontSize: 11, fontWeight: '800' },
-  divider: { height: 1, backgroundColor: 'rgba(79,70,229,0.1)', marginVertical: 24 },
-  statsGrid: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  statItem: { alignItems: 'center', flex: 1 },
-  statSubValue: { color: '#0F172A', fontSize: 20, fontWeight: '900' },
-  statSubLabel: { color: '#0A6A4C', fontSize: 13, fontWeight: '700', marginTop: 4, opacity: 0.9 },
-  statDivider: { width: 1, height: 30, backgroundColor: 'rgba(79,70,229,0.1)' },
-  sectionTitle: { color: '#1A1A1A', fontSize: 18, fontWeight: '800', marginBottom: 20 },
-  rateCard: { backgroundColor: '#F0FDF4', borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 4, marginBottom: 32, borderWidth: 1, borderColor: 'rgba(0,200,83,0.1)' },
-  rateRow: { flexDirection: 'row', alignItems: 'center' },
-  rateLabel: { color: '#15803D', fontSize: 13, fontWeight: '700' },
-  rateValue: { color: '#1A1A1A', fontSize: 16, fontWeight: '800', marginTop: 2 },
-  collapsibleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F3E8FF', padding: 18, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(112,45,255,0.1)' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  collapsibleTitle: { color: '#1A1A1A', fontSize: 15, fontWeight: '700' },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 68, paddingTop: 10, backgroundColor: '#FFFFFF' },
+  
+  chartSection: { backgroundColor: '#FFFFFF', marginTop: 10, marginBottom: 20 },
+  topLabel: { color: '#1E293B', fontSize: 17, fontWeight: '700' },
+  topValue: { color: '#0F172A', fontSize: 44, fontWeight: '800', marginTop: 4, letterSpacing: -1 },
+  
+  togglePillContainer: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 24, padding: 4, marginTop: 20, marginBottom: 10 },
+  toggleBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
+  toggleBtnActive: { backgroundColor: '#0F172A', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  toggleText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
+  toggleTextActive: { color: '#FFFFFF' },
+  
+  chartWrapper: { marginLeft: -16, marginTop: 10 },
+  chartStyle: { marginVertical: 8 },
+  
+  dividerLight: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 16 },
+  
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  statBox: { alignItems: 'center', flex: 1 },
+  statVal: { color: '#0F172A', fontSize: 18, fontWeight: '800' },
+  statLab: { color: '#64748B', fontSize: 13, fontWeight: '500', marginTop: 4 },
+  vertDivider: { width: 1, height: 30, backgroundColor: '#F1F5F9' },
+  
+  mockupHistoryTile: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FAFAFD', padding: 20, borderRadius: 20, marginTop: 24 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  greenCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center' },
+  historyTileTitle: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
+  
+  mockupPayoutTile: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 20, borderRadius: 20, marginTop: 16, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  payoutLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  greenBriefcase: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center', marginTop: 2 },
+  payoutTileTitle: { color: '#1E293B', fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  payoutTileSub: { color: '#64748B', fontSize: 12, fontWeight: '500', lineHeight: 16 },
+  payoutTileAmount: { color: '#0F172A', fontSize: 24, fontWeight: '800' },
+  
   historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', marginHorizontal: 12 },
   historyLabel: { color: '#1A1A1A', fontSize: 15, fontWeight: '700' },
   historySub: { color: '#6B7280', fontSize: 12, marginTop: 2 },
   historyAmount: { color: '#1A1A1A', fontSize: 16, fontWeight: '800' },
-  payoutContent: { padding: 12 },
-  payoutStatusCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F0FDF4', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#DCFCE7' },
-  payoutStatusText: { flex: 1, color: '#15803D', fontSize: 13, fontWeight: '600', lineHeight: 20 },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalBox: { backgroundColor: '#FFFFFF', borderRadius: 32, padding: 24, width: '100%', maxWidth: 400, alignItems: 'center' },

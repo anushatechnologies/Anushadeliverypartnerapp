@@ -1,41 +1,40 @@
-import React, { useState, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Linking,
-  TextInput,
-  Modal,
-  Alert,
-  Image,
-  Dimensions,
-  Platform,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import Animated, { 
-  FadeInDown, 
-  FadeInUp, 
-  Layout, 
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import React, { useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import Animated, {
+  FadeInDown,
+  FadeInUp,
+  Layout,
   ZoomIn,
   useAnimatedStyle,
   withRepeat,
-  withTiming,
-  useDerivedValue,
+  withTiming
 } from "react-native-reanimated";
-import { StatusBar } from "expo-status-bar";
-import { useLanguage } from "../../context/LanguageContext";
-import PremiumHeader from "../../components/PremiumHeader";
-import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
 import CustomTouchableOpacity from "../../components/CustomTouchableOpacity";
-import { orderService } from "../../services/orderService";
+import PremiumHeader from "../../components/PremiumHeader";
+import { useLanguage } from "../../context/LanguageContext";
 import { useUser } from "../../context/UserContext";
-import { ActivityIndicator } from "react-native";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { orderService } from "../../services/orderService";
 
 const { width } = Dimensions.get("window");
 
@@ -62,6 +61,7 @@ type Order = {
   itemsList: OrderItem[];
   distance: string;
   earnings: number;
+  grandTotal: number;
   status: string;
   payment: string;
   otp: string;
@@ -73,11 +73,11 @@ export default function OrdersTab() {
   const [activeTab, setActiveTab] = useState("Active");
   const [otpModal, setOtpModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  
+
   // Fulfillment State
   const [vendorOtp, setVendorOtp] = useState("");
   const [vendorOtpVerified, setVendorOtpVerified] = useState(false);
-  
+
   const [otp, setOtp] = useState("");
   const [deliveryPhoto, setDeliveryPhoto] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -85,7 +85,7 @@ export default function OrdersTab() {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'UPI' | null>(null);
   const [loading, setLoading] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
-  
+
   // UI State
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<Order | null>(null);
@@ -94,32 +94,100 @@ export default function OrdersTab() {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  
+
   // Camera State
   const [showCamera, setShowCamera] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   const mapBackendOrder = (backendOrder: any): Order => {
-     return {
-        id: backendOrder.id || Math.random(),
-        orderId: backendOrder.orderNumber || backendOrder.id?.toString() || backendOrder.orderId || "#UNK",
-        vendorName: backendOrder.vendorName || backendOrder.storeName || "Anusha Fresh Mart",
-        vendorAddress: backendOrder.vendorAddress || "Pickup Location",
-        vendorPhone: backendOrder.vendorPhone || "0000000000",
-        vendorOtp: backendOrder.vendorOtp || backendOrder.pickupOtp || "1111",
-        pickupConfirmed: backendOrder.status === 'PICKED_UP' || backendOrder.pickupConfirmed,
-        customer: backendOrder.customerName || backendOrder.customer || "Customer",
-        phone: backendOrder.customerPhone || backendOrder.phone || "0000000000",
-        address: backendOrder.deliveryAddress || backendOrder.address || "Delivery Address",
-        customerCoords: { latitude: 17.4968, longitude: 78.3614 },
-        items: backendOrder.itemsCount || backendOrder.items?.length || 1,
-        itemsList: backendOrder.items || [],
-        distance: backendOrder.distance || "1.2 km",
-        earnings: backendOrder.earnings || backendOrder.estimatedEarnings || 45,
-        status: backendOrder.status === 'DELIVERED' ? 'Completed' : 'Active',
-        payment: backendOrder.paymentMethod || backendOrder.paymentMode || 'Online',
-        otp: backendOrder.deliveryOtp || backendOrder.otp || "1234"
-     };
+    console.log("\n[DEBUG] RAW BACKEND ORDER KEYS:", Object.keys(backendOrder));
+    console.log("[DEBUG] RAW BACKEND ORDER:", JSON.stringify(backendOrder, null, 2));
+
+    // ── Store / Vendor info ──
+    const store = backendOrder.store || backendOrder.vendor || backendOrder.merchant || backendOrder.restaurant || backendOrder.pickupLocation || {};
+    const storeName = store.name || store.storeName || store.vendorName || store.merchantName || store.restaurantName
+      || backendOrder.vendorName || backendOrder.storeName || backendOrder.merchantName || backendOrder.restaurantName 
+      || backendOrder.pickup?.name || backendOrder.pickupName
+      || "Unknown Store";
+    const storeAddress = store.address || store.storeAddress || store.vendorAddress || store.restaurantAddress
+      || backendOrder.vendorAddress || backendOrder.storeAddress || backendOrder.pickupAddress || backendOrder.restaurantAddress
+      || backendOrder.pickup?.address
+      || "Unknown Address";
+    const storePhone = store.phone || store.mobile || store.contactNumber || store.phoneNumber || store.vendorPhone
+      || backendOrder.vendorPhone || backendOrder.storePhone || backendOrder.restaurantPhone || backendOrder.pickupPhone || backendOrder.pickup?.phone
+      || "";
+
+    // ── Customer info ──
+    const cust = backendOrder.customer || backendOrder.user || backendOrder.buyer || backendOrder.deliveryDetails || {};
+    const customerName = typeof cust === 'string' ? cust :
+      (cust.firstName ? `${cust.firstName} ${cust.lastName || ''}`.trim() 
+       : (cust.name || cust.fullName || backendOrder.customerName || backendOrder.buyerName || "Unknown Customer"));
+    const customerPhone = cust.phone || cust.mobile || cust.contactNumber || cust.phoneNumber
+      || backendOrder.customerPhone || backendOrder.phone || backendOrder.buyerPhone || backendOrder.deliveryPhone || backendOrder.dropoffPhone || backendOrder.dropoff?.phone || "";
+    const customerAddress = cust.address || cust.deliveryAddress || cust.customerAddress
+      || backendOrder.deliveryAddress || backendOrder.address || backendOrder.customerAddress
+      || backendOrder.dropoff?.address || backendOrder.dropoffAddress
+      || "Unknown Address";
+
+    // ── Coordinates ──
+    const defaultLat = 17.4968;
+    const defaultLng = 78.3614;
+    
+    // Try to extract store lat/lng
+    const storeLat = store.latitude || store.lat || backendOrder.pickupLatitude || backendOrder.pickupLat;
+    const storeLng = store.longitude || store.lng || store.lon || backendOrder.pickupLongitude || backendOrder.pickupLng;
+    const vendorCoords = (storeLat && storeLng) 
+      ? { latitude: Number(storeLat), longitude: Number(storeLng) } 
+      : undefined;
+    
+    // Try to extract customer lat/lng
+    const custLat = cust.latitude || cust.lat || backendOrder.deliveryLatitude || backendOrder.dropoffLat;
+    const custLng = cust.longitude || cust.lng || cust.lon || backendOrder.deliveryLongitude || backendOrder.dropoffLng;
+    const customerCoords = (custLat && custLng)
+      ? { latitude: Number(custLat), longitude: Number(custLng) }
+      : { latitude: defaultLat, longitude: defaultLng };
+
+    // ── Items ──
+    let rawItems = backendOrder.items || backendOrder.orderItems || backendOrder.order_items || backendOrder.products || backendOrder.cartItems || backendOrder.cart_items || backendOrder.cart?.items || backendOrder.orderDetails || backendOrder.order_details || [];
+    if (typeof rawItems === 'string') {
+      try { rawItems = JSON.parse(rawItems); } catch(e) { rawItems = []; }
+    }
+    const itemsList = Array.isArray(rawItems) ? rawItems.map((item: any) => ({
+      name: item.name || item.productName || item.itemName || item.title || item.menuItem?.name || item.product?.name || 'Item',
+      qty: String(item.qty || item.quantity || item.count || 1),
+      price: Number(item.price || item.total || item.amount || item.menuItem?.price || item.product?.price || 0),
+    })) : [];
+
+    // ── Order number ──
+    const orderNumber = backendOrder.orderNumber || backendOrder.orderId?.toString() || backendOrder.id?.toString() || "#UNK";
+    
+    // ── Grand Total ──
+    const grandTotal = Number(backendOrder.grandTotal || backendOrder.grand_total || backendOrder.totalAmount || backendOrder.total_amount || backendOrder.totalPrice || backendOrder.total_price || backendOrder.orderAmount || backendOrder.order_amount || backendOrder.billAmount || backendOrder.bill_amount || backendOrder.amount || backendOrder.total || itemsList.reduce((acc, curr) => acc + curr.price, 0) || 0);
+
+    return {
+      id: backendOrder.id || Math.random(),
+      orderId: orderNumber,
+      vendorName: storeName,
+      vendorAddress: storeAddress,
+      vendorPhone: storePhone,
+      vendorOtp: backendOrder.vendorOtp || backendOrder.pickupOtp || "",
+      vendorCoords: vendorCoords,
+      pickupConfirmed: backendOrder.status === 'PICKED_UP' || backendOrder.pickupConfirmed || false,
+      customer: customerName,
+      phone: customerPhone,
+      address: customerAddress,
+      customerCoords: customerCoords,
+      items: backendOrder.itemsCount || rawItems?.length || 0,
+      itemsList: itemsList,
+      distance: backendOrder.distanceKm ? `${Number(backendOrder.distanceKm).toFixed(1)} km` : (backendOrder.distance || "—"),
+      earnings: backendOrder.deliveryFee ?? backendOrder.delivery_fee ?? backendOrder.earnings ?? backendOrder.estimatedEarnings ?? 0,
+      grandTotal: grandTotal,
+      status: (backendOrder.status === 'DELIVERED' || backendOrder.status === 'COMPLETED' || backendOrder.status === 'CANCELLED') 
+                 ? 'Completed' 
+                 : 'Active',
+      payment: backendOrder.paymentMethod || backendOrder.paymentMode || 'Online',
+      otp: backendOrder.deliveryOtp || backendOrder.otp || ""
+    };
   };
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -132,12 +200,48 @@ export default function OrdersTab() {
     setRefreshing(true);
     try {
       if (activeTab === "Active") {
-        const data = await orderService.getActiveOrders(user.id);
-        const mapped = Array.isArray(data) ? data.map(mapBackendOrder) : [];
+        const rawAll = await orderService.getOrders(user.id).catch(() => []);
+
+        const extractOrders = (resp: any) => {
+          if (Array.isArray(resp)) return resp;
+          if (resp && typeof resp === 'object') {
+            if (Array.isArray(resp.data)) return resp.data;
+            if (Array.isArray(resp.content)) return resp.content;
+            if (Array.isArray(resp.orders)) return resp.orders;
+            const arrs = Object.values(resp).filter(Array.isArray);
+            if (arrs.length > 0) return arrs[0];
+          }
+          return [];
+        };
+
+        const listAll = extractOrders(rawAll);
+
+        // Filter out delivered ones to act as Active (meaning Picked Up, In Transit, Assigned, etc.)
+        const unique = Array.from(new Map(listAll.map(o => [o.id, o])).values());
+        const mapped = unique
+          .filter((o: any) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED')
+          .map(mapBackendOrder);
         setOrders(mapped);
       } else {
-        const data = await orderService.getCompletedOrders(user.id);
-        const mapped = Array.isArray(data) ? data.map(mapBackendOrder) : [];
+        const rawAll = await orderService.getOrders(user.id).catch(() => []);
+        const extractOrders = (resp: any) => {
+          if (Array.isArray(resp)) return resp;
+          if (resp && typeof resp === 'object') {
+            if (Array.isArray(resp.data)) return resp.data;
+            if (Array.isArray(resp.content)) return resp.content;
+            if (Array.isArray(resp.orders)) return resp.orders;
+            const arrs = Object.values(resp).filter(Array.isArray);
+            if (arrs.length > 0) return arrs[0];
+          }
+          return [];
+        };
+        const orderList = extractOrders(rawAll);
+        
+        // Past orders are ones that are explicitly finished or cancelled
+        const pastOrders = orderList.filter((o: any) => 
+          o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED'
+        );
+        const mapped = pastOrders.map(mapBackendOrder);
         setOrders(mapped);
       }
     } catch (e) {
@@ -188,7 +292,7 @@ export default function OrdersTab() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: false, 
+        allowsEditing: false,
         quality: 0.2
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -201,13 +305,22 @@ export default function OrdersTab() {
   };
 
   const handleSendOtp = async () => {
-    if (!selectedOrder?.phone) return;
+    if (!selectedOrder?.orderId) return;
     setSendingOtp(true);
-    setTimeout(() => {
+    try {
+      const res = await orderService.generateDeliveryOtp(selectedOrder.orderId);
       setOtpSent(true);
-      Alert.alert("OTP Retreived (Dev Mode)", `The real system sends SMS to customer. For dev testing, the customer OTP is: ${selectedOrder.otp || '1234'}`);
+      // In dev mode show the OTP returned by the server so testers can confirm delivery
+      if (res?.otp) {
+        Alert.alert('OTP Sent', `Customer OTP sent via SMS.\n\nDev: ${res.otp}`);
+      } else {
+        Alert.alert('OTP Sent', 'A delivery OTP has been sent to the customer.');
+      }
+    } catch (e: any) {
+      Alert.alert('Failed', e?.response?.data?.error || e?.message || 'Could not generate delivery OTP.');
+    } finally {
       setSendingOtp(false);
-    }, 800);
+    }
   };
 
   const handleVerifyVendorOtp = async () => {
@@ -242,7 +355,7 @@ export default function OrdersTab() {
     if (!vendorOtpVerified && selectedOrder?.vendorName) return Alert.alert("Required", "Please verify pickup with the Vendor first.");
     if (!deliveryPhoto) return Alert.alert("Required", "Please capture a photo of the delivery at the doorstep.");
     if (!otpVerified) return Alert.alert("Required", "Please verify the customer OTP first.");
-    
+
     if (selectedOrder?.payment === 'Cash' && !paymentConfirmed) {
       return Alert.alert("Payment Required", "Please confirm cash collection before completing delivery.");
     }
@@ -250,8 +363,8 @@ export default function OrdersTab() {
     setLoading(true);
     try {
       if (selectedOrder) {
-        // Technically backend doesn't support proofUri or amountCollected in this endpoint yet based on doc, so we just confirm
-        await orderService.confirmDelivery(selectedOrder.orderId, otp);
+        // Use the preferred app endpoint — submits OTP + delivery photo together
+        await orderService.confirmDeliveryWithPhoto(selectedOrder.orderId, otp, deliveryPhoto || undefined);
       }
 
       setOrders(prev => prev.map(o => o.id === selectedOrder?.id ? { ...o, status: 'Completed', pickupConfirmed: true } : o));
@@ -265,7 +378,7 @@ export default function OrdersTab() {
       setPaymentMethod(null);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
-      
+
       // Auto-refresh lists
       fetchOrders();
     } catch (error: any) {
@@ -304,7 +417,7 @@ export default function OrdersTab() {
       ],
     };
   });
-  
+
   const progressLine1Style = useAnimatedStyle(() => {
     return {
       width: `${withTiming(!!deliveryPhoto ? 100 : 0, { duration: 500 })}%`
@@ -321,18 +434,18 @@ export default function OrdersTab() {
     <View style={styles.container}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safe} edges={['top']}>
-        
+
         <View style={styles.headerContainer}>
-          <PremiumHeader 
+          <PremiumHeader
             title={t('tasks')}
             transparent
           />
-          
+
           {/* Modern Premium Tab Selector */}
           <View style={styles.tabContainer}>
             <View style={styles.tabPill}>
-              <TouchableOpacity 
-                onPress={() => setActiveTab("Active")} 
+              <TouchableOpacity
+                onPress={() => setActiveTab("Active")}
                 style={[styles.tabBtn, activeTab === "Active" && styles.tabBtnActive]}
                 activeOpacity={0.8}
               >
@@ -353,8 +466,8 @@ export default function OrdersTab() {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                onPress={() => setActiveTab("Completed")} 
+              <TouchableOpacity
+                onPress={() => setActiveTab("Completed")}
                 style={[styles.tabBtn, activeTab === "Completed" && styles.tabBtnActive]}
                 activeOpacity={0.8}
               >
@@ -378,8 +491,8 @@ export default function OrdersTab() {
           </View>
         </View>
 
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           {filteredOrders.length === 0 ? (
@@ -392,23 +505,40 @@ export default function OrdersTab() {
             </Animated.View>
           ) : (
             filteredOrders.map((order, i) => (
-              <OrderCard 
-                key={order.id} 
-                order={order} 
-                index={i} 
+              <OrderCard
+                key={order.id}
+                order={order}
+                index={i}
                 t={t}
-                onPress={() => {
+                onPress={async () => {
                   setSelectedDetailOrder(order);
                   setDetailVisible(true);
+                  try {
+                    // Try fetching complete order details quietly in case items were omitted in the list api
+                    let fullOrder = await orderService.getOrderByNumber(order.orderId).catch(() => null);
+                    if (!fullOrder && order.id) {
+                       fullOrder = await orderService.getOrderById(order.id).catch(() => null);
+                    }
+                    
+                    if (fullOrder) {
+                       // Unwrap if the backend wraps the object in { data: {...} } or { order: {...} }
+                       if (fullOrder.data && !fullOrder.id && !fullOrder.orderId) fullOrder = fullOrder.data;
+                       else if (fullOrder.order && !fullOrder.id && !fullOrder.orderId) fullOrder = fullOrder.order;
+
+                       setSelectedDetailOrder(mapBackendOrder(fullOrder));
+                    }
+                  } catch(e) {
+                     console.log("Could not fetch full order details", e);
+                  }
                 }}
-                onVerify={() => { 
-                  setSelectedOrder(order); 
+                onVerify={() => {
+                  setSelectedOrder(order);
                   setOtpVerified(false);
                   setPaymentConfirmed(false);
                   setOtp("");
                   setDeliveryPhoto(null);
                   setOtpSent(false); // Reset OTP state
-                  setOtpModal(true); 
+                  setOtpModal(true);
                 }}
               />
             ))
@@ -419,10 +549,10 @@ export default function OrdersTab() {
       {/* Order Details Modal */}
       <Modal visible={detailVisible} transparent animationType="fade">
         <View style={[styles.modalBlurOverlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
-          <TouchableOpacity 
-            style={styles.modalDismissArea} 
-            activeOpacity={1} 
-            onPress={() => setDetailVisible(false)} 
+          <TouchableOpacity
+            style={styles.modalDismissArea}
+            activeOpacity={1}
+            onPress={() => setDetailVisible(false)}
           />
           <Animated.View entering={ZoomIn.duration(400)} style={styles.detailsModalContent}>
             <View style={styles.detailsHeader}>
@@ -439,9 +569,9 @@ export default function OrdersTab() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.itemsScroll}>
-              
+
               {/* Map functionality moved to the Order Card directly */}
-              
+
               <View style={styles.itemsHeaderRow}>
                 <Text style={styles.itemsHeaderTitle}>Order Items</Text>
                 <View style={styles.itemsCountBadge}>
@@ -463,7 +593,7 @@ export default function OrdersTab() {
               <View style={styles.billingSection}>
                 <View style={styles.billRow}>
                   <Text style={styles.billLabel}>Item Total</Text>
-                  <Text style={styles.billVal}>₹{selectedDetailOrder?.itemsList.reduce((acc, curr) => acc + curr.price, 0)}</Text>
+                  <Text style={styles.billVal}>₹{selectedDetailOrder?.itemsList.reduce((acc, curr) => acc + curr.price, 0) || selectedDetailOrder?.grandTotal || 0}</Text>
                 </View>
                 <View style={styles.billRow}>
                   <Text style={styles.billLabel}>Delivery Fee</Text>
@@ -471,12 +601,12 @@ export default function OrdersTab() {
                 </View>
                 <View style={[styles.billRow, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}>
                   <Text style={styles.billTotalLabel}>Grand Total</Text>
-                  <Text style={styles.billTotalVal}>₹{selectedDetailOrder?.itemsList.reduce((acc, curr) => acc + curr.price, 0)}</Text>
+                  <Text style={styles.billTotalVal}>₹{selectedDetailOrder?.grandTotal || selectedDetailOrder?.itemsList.reduce((acc, curr) => acc + curr.price, 0) || 0}</Text>
                 </View>
               </View>
             </ScrollView>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 setDetailVisible(false);
                 if (selectedDetailOrder?.status === 'Active') {
@@ -504,14 +634,14 @@ export default function OrdersTab() {
       </Modal>
       <Modal visible={otpModal} transparent animationType="slide">
         <View style={[styles.modalBlurOverlay, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
-          <TouchableOpacity 
-            style={styles.modalDismissArea} 
-            activeOpacity={1} 
-            onPress={() => setOtpModal(false)} 
+          <TouchableOpacity
+            style={styles.modalDismissArea}
+            activeOpacity={1}
+            onPress={() => setOtpModal(false)}
           />
           <Animated.View entering={FadeInUp.springify().damping(20)} style={styles.modalSheet}>
             <View style={styles.modalSheetHandle} />
-            
+
             <View style={styles.modalSheetHeader}>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -572,20 +702,20 @@ export default function OrdersTab() {
                       </Animated.View>
                     )}
                   </View>
-                  
+
                   <View style={[styles.otpFieldWrap, vendorOtpVerified && styles.otpVerifiedWrap]}>
-                    <MaterialCommunityIcons 
-                      name={vendorOtpVerified ? "shield-check" : "storefront-outline"} 
-                      size={22} 
-                      color={vendorOtpVerified ? "#10B981" : "#475569"} 
-                      style={styles.otpIcon} 
+                    <MaterialCommunityIcons
+                      name={vendorOtpVerified ? "shield-check" : "storefront-outline"}
+                      size={22}
+                      color={vendorOtpVerified ? "#10B981" : "#475569"}
+                      style={styles.otpIcon}
                     />
-                    <TextInput 
-                      style={styles.otpInputField} 
-                      placeholder="Enter 4-digit Vendor code" 
-                      placeholderTextColor="#94A3B8" 
-                      keyboardType="number-pad" 
-                      maxLength={4} 
+                    <TextInput
+                      style={styles.otpInputField}
+                      placeholder="Enter 4-digit Vendor code"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      maxLength={4}
                       value={vendorOtp}
                       onChangeText={(val) => {
                         setVendorOtp(val);
@@ -625,9 +755,9 @@ export default function OrdersTab() {
                     </Animated.View>
                   )}
                 </View>
-                
-                <TouchableOpacity 
-                  onPress={takeDeliveryPhoto} 
+
+                <TouchableOpacity
+                  onPress={takeDeliveryPhoto}
                   disabled={selectedOrder?.vendorName && !vendorOtpVerified ? true : false}
                   style={[styles.cameraBox, deliveryPhoto && styles.cameraBoxSuccess]}
                 >
@@ -652,7 +782,7 @@ export default function OrdersTab() {
 
                 {/* Android Native Backup - Gallery Upload */}
                 {!deliveryPhoto && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={uploadDeliveryPhoto}
                     disabled={selectedOrder?.vendorName && !vendorOtpVerified ? true : false}
                     style={styles.galleryBackupBtn}
@@ -683,20 +813,20 @@ export default function OrdersTab() {
                     </Animated.View>
                   )}
                 </View>
-                
+
                 <View style={[styles.otpFieldWrap, otpVerified && styles.otpVerifiedWrap, !deliveryPhoto && styles.otpFieldLocked]}>
-                  <MaterialCommunityIcons 
-                    name={otpVerified ? "shield-check" : "shield-key-outline"} 
-                    size={22} 
-                    color={otpVerified ? "#10B981" : "#475569"} 
-                    style={styles.otpIcon} 
+                  <MaterialCommunityIcons
+                    name={otpVerified ? "shield-check" : "shield-key-outline"}
+                    size={22}
+                    color={otpVerified ? "#10B981" : "#475569"}
+                    style={styles.otpIcon}
                   />
-                  <TextInput 
-                    style={styles.otpInputField} 
-                    placeholder="Enter 4-digit secret code" 
-                    placeholderTextColor="#94A3B8" 
-                    keyboardType="number-pad" 
-                    maxLength={4} 
+                  <TextInput
+                    style={styles.otpInputField}
+                    placeholder="Enter 4-digit secret code"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="number-pad"
+                    maxLength={4}
                     value={otp}
                     onChangeText={(val) => {
                       setOtp(val);
@@ -735,7 +865,7 @@ export default function OrdersTab() {
                       </Animated.View>
                     )}
                   </View>
-                  
+
                   <View style={[styles.paymentScannerContainer, !deliveryPhoto && styles.scannerLocked]}>
                     <View style={styles.amountBox}>
                       <Text style={styles.amountLabel}>Amount to Collect</Text>
@@ -768,11 +898,11 @@ export default function OrdersTab() {
                         </View>
 
                         <View style={{ flexDirection: 'row', gap: 12 }}>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             onPress={() => {
                               setPaymentMethod('Cash');
                               setPaymentConfirmed(true);
-                            }} 
+                            }}
                             disabled={!deliveryPhoto}
                             style={[styles.cashBtn, !deliveryPhoto && { opacity: 0.5, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' }]}
                           >
@@ -780,8 +910,8 @@ export default function OrdersTab() {
                             <Text style={[styles.cashBtnText, !deliveryPhoto && { color: '#94A3B8' }]}>Received Cash</Text>
                           </TouchableOpacity>
 
-                          <TouchableOpacity 
-                            onPress={handleScannerOpen} 
+                          <TouchableOpacity
+                            onPress={handleScannerOpen}
                             disabled={!deliveryPhoto}
                             style={[styles.scanAlternativeBtn, !deliveryPhoto && { opacity: 0.5, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' }]}
                           >
@@ -796,17 +926,17 @@ export default function OrdersTab() {
               )}
 
               {/* Professionally Linked Confirm Button */}
-              <CustomTouchableOpacity 
-                onPress={handleVerify} 
+              <CustomTouchableOpacity
+                onPress={handleVerify}
                 style={[
-                  styles.completeBtn, 
+                  styles.completeBtn,
                   (!deliveryPhoto || !otpVerified || (selectedOrder?.payment === 'Cash' && !paymentConfirmed)) && styles.completeBtnDisabled
                 ]}
                 disabled={loading || !deliveryPhoto || !otpVerified || (selectedOrder?.payment === 'Cash' && !paymentConfirmed)}
               >
                 <LinearGradient
-                  colors={(!deliveryPhoto || !otpVerified || (selectedOrder?.payment === 'Cash' && !paymentConfirmed)) 
-                    ? ['#CBD5E1', '#94A3B8'] 
+                  colors={(!deliveryPhoto || !otpVerified || (selectedOrder?.payment === 'Cash' && !paymentConfirmed))
+                    ? ['#CBD5E1', '#94A3B8']
                     : ['#10B981', '#059669']}
                   style={styles.btnGradient}
                 >
@@ -820,7 +950,7 @@ export default function OrdersTab() {
                   )}
                 </LinearGradient>
               </CustomTouchableOpacity>
-              
+
               <View style={{ height: 40 }} />
             </ScrollView>
           </Animated.View>
@@ -886,7 +1016,7 @@ export default function OrdersTab() {
               <View style={{ width: 40 }} />
             </View>
 
-            <CameraView 
+            <CameraView
               ref={cameraRef}
               style={styles.deliveryCameraView}
               facing="back"
@@ -908,9 +1038,9 @@ export default function OrdersTab() {
 
 function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index: number, t: any, onVerify: () => void, onPress: () => void }) {
   const isCompleted = order.status === 'Completed';
-  
+
   return (
-    <Animated.View 
+    <Animated.View
       entering={FadeInDown.delay(index * 100).duration(500)}
       style={styles.orderCardWrap}
     >
@@ -924,17 +1054,17 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
               <Text style={styles.earningsVal}>₹{order.earnings}</Text>
             </View>
           </View>
-          
+
           <View style={[
-            styles.statusPill, 
+            styles.statusPill,
             { backgroundColor: isCompleted ? '#DCFCE7' : '#F3E8FF' }
           ]}>
             <View style={[
-              styles.statusDot, 
+              styles.statusDot,
               { backgroundColor: isCompleted ? '#22C55E' : '#0E8A63' }
             ]} />
             <Text style={[
-              styles.statusPillText, 
+              styles.statusPillText,
               { color: isCompleted ? '#166534' : '#0E8A63' }
             ]}>
               {order.status}
@@ -980,9 +1110,11 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
               <Text style={styles.customerName}>{order.customer}</Text>
               <Text style={styles.addressText} numberOfLines={2}>{order.address}</Text>
             </View>
-            <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.phone}`)} style={styles.phoneActionBtn}>
-              <MaterialCommunityIcons name="phone-outline" size={18} color="#EF4444" />
-            </TouchableOpacity>
+            {order.phone ? (
+              <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.phone}`)} style={styles.phoneActionBtn}>
+                <MaterialCommunityIcons name="phone-outline" size={18} color="#EF4444" />
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
 
@@ -1005,7 +1137,7 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
         {/* Actions */}
         {!isCompleted && (
           <View style={styles.actionRow}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 const navAddress = (!order.pickupConfirmed && order.vendorAddress) ? order.vendorAddress : order.address;
                 Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(navAddress)}`);
@@ -1015,8 +1147,8 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
               <MaterialCommunityIcons name="google-maps" size={20} color="#1E293B" />
               <Text style={styles.mapActionText}>Map</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               onPress={onVerify}
               style={styles.primaryActionBtn}
             >
@@ -1041,22 +1173,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   safe: { flex: 1, backgroundColor: "#FFFFFF" },
   headerContainer: { backgroundColor: '#FFFFFF', paddingBottom: 16 },
-  
+
   // Tab Styles
   tabContainer: { paddingHorizontal: 20, marginTop: 4 },
-  tabPill: { 
-    flexDirection: 'row', 
-    backgroundColor: '#F1F5F9', 
-    borderRadius: 24, 
+  tabPill: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 24,
     padding: 6,
     borderWidth: 1,
     borderColor: '#E2E8F0'
   },
-  tabBtn: { 
-    flex: 1, 
-    height: 48, 
-    borderRadius: 20, 
-    justifyContent: 'center', 
+  tabBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 20,
+    justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden'
   },
@@ -1070,19 +1202,19 @@ const styles = StyleSheet.create({
   tabGradient: {
     ...StyleSheet.absoluteFillObject,
   },
-  tabLabel: { 
-    fontSize: 13, 
-    fontWeight: '800', 
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: '800',
     color: '#64748B',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     zIndex: 1
   },
   tabLabelActive: { color: '#FFFFFF' },
-  
-  scrollContent: { 
-    paddingHorizontal: 20, 
-    paddingBottom: 40, 
+
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
     paddingTop: 24,
     backgroundColor: '#F8FAFC',
     borderTopLeftRadius: 36,
@@ -1090,9 +1222,9 @@ const styles = StyleSheet.create({
   },
 
   // Card Styles
-  orderCardWrap: { 
-    marginBottom: 20, 
-    borderRadius: 32, 
+  orderCardWrap: {
+    marginBottom: 20,
+    borderRadius: 32,
     backgroundColor: '#FFFFFF',
     elevation: 4,
     shadowColor: '#000',
@@ -1109,17 +1241,17 @@ const styles = StyleSheet.create({
   earningsBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   earningsLabel: { fontSize: 12, fontWeight: '600', color: '#64748B' },
   earningsVal: { fontSize: 13, fontWeight: '800', color: '#059669' },
-  statusPill: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 14 
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14
   },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   statusPillText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   cardDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 16 },
-  
+
   // Vendor Info Styles
   vendorRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   iconCircleVendor: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EDE9FE' },
@@ -1128,7 +1260,7 @@ const styles = StyleSheet.create({
   routeConnector: { height: 24, marginLeft: 20, borderLeftWidth: 2, borderLeftColor: '#E2E8F0', borderStyle: 'dotted', marginVertical: 2 },
   routeDottedLine: { display: 'none' }, // Using borderLeft on container instead
   phoneActionBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
-  
+
   // Customer Info Styles
   customerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   iconCircle: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
@@ -1137,33 +1269,33 @@ const styles = StyleSheet.create({
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
   addressText: { flex: 1, fontSize: 13, color: '#445569', fontWeight: '500', lineHeight: 20 },
   metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 20 },
-  metaCapsule: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6, 
-    backgroundColor: '#F1F5F9', 
-    paddingHorizontal: 10, 
-    paddingVertical: 6, 
-    borderRadius: 10 
+  metaCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10
   },
   metaCapsuleText: { fontSize: 11, fontWeight: '800', color: '#475569' },
   actionRow: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  roundActionBtn: { 
-    width: 56, 
-    height: 56, 
-    borderRadius: 20, 
-    backgroundColor: '#F1F5F9', 
-    justifyContent: 'center', 
+  roundActionBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0'
   },
   primaryActionBtn: { flex: 1, borderRadius: 20, overflow: 'hidden' },
-  actionGradient: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
+  actionGradient: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: 10,
     elevation: 8,
     shadowColor: '#0A6A4C',
@@ -1182,54 +1314,54 @@ const styles = StyleSheet.create({
   // Modal Styles
   modalBlurOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalDismissArea: { flex: 1 },
-  modalSheet: { 
-    backgroundColor: '#FFFFFF', 
-    borderTopLeftRadius: 40, 
-    borderTopRightRadius: 40, 
-    paddingHorizontal: 24, 
-    paddingTop: 12, 
-    maxHeight: '90%' 
+  modalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    maxHeight: '90%'
   },
-  modalSheetHandle: { 
-    width: 40, 
-    height: 5, 
-    backgroundColor: '#E2E8F0', 
-    borderRadius: 3, 
-    alignSelf: 'center', 
-    marginBottom: 20 
+  modalSheetHandle: {
+    width: 40,
+    height: 5,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginBottom: 20
   },
-  modalSheetHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'flex-start', 
-    marginBottom: 24 
+  modalSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 24
   },
   modalSheetTitle: { fontSize: 24, fontWeight: '900', color: '#1E293B', letterSpacing: -0.5 },
   modalSheetSubtitle: { fontSize: 13, color: '#64748B', fontWeight: '500', marginTop: 2 },
-  modalCloseIconBtn: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 22, 
-    backgroundColor: '#F1F5F9', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  modalCloseIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   modalSheetScroll: { paddingBottom: 40 },
-  
+
   stepContainer: { marginBottom: 20 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   stepNumber: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#14A06D', justifyContent: 'center', alignItems: 'center' },
   stepNumberText: { fontSize: 13, fontWeight: '900', color: '#FFFFFF' },
   stepTitle: { fontSize: 16, fontWeight: '800', color: '#334155' },
-  
-  cameraBox: { 
-    height: 180, 
-    borderRadius: 28, 
-    backgroundColor: '#F8FAFC', 
-    borderWidth: 2, 
-    borderColor: '#E2E8F0', 
-    borderStyle: 'dashed', 
-    overflow: 'hidden' 
+
+  cameraBox: {
+    height: 180,
+    borderRadius: 28,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    overflow: 'hidden'
   },
   cameraBoxSuccess: { borderStyle: 'solid', borderColor: '#10B981' },
   cameraPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
@@ -1238,34 +1370,34 @@ const styles = StyleSheet.create({
   cameraSubText: { fontSize: 12, color: '#94A3B8', marginTop: 4, textAlign: 'center' },
   photoContainer: { flex: 1 },
   capturedPhoto: { width: '100%', height: '100%' },
-  photoOverlay: { 
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: 'rgba(0,0,0,0.3)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  photoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   photoOverlayText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800', marginTop: 8 },
-  
-  otpFieldWrap: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F1F5F9', 
-    borderRadius: 20, 
-    height: 64, 
-    paddingHorizontal: 20, 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0' 
+
+  otpFieldWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    height: 64,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
   },
   otpIcon: { marginRight: 14 },
   otpInputField: { flex: 1, fontSize: 18, fontWeight: '800', color: '#1E293B' },
-  
+
   completeBtn: { marginTop: 32, borderRadius: 22, overflow: 'hidden', elevation: 8 },
-  btnGradient: { 
-    height: 68, 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 12 
+  btnGradient: {
+    height: 68,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12
   },
   completeBtnText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
 
@@ -1591,7 +1723,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
-  
+
   // Real Map Context Styles
   mapContainer: {
     marginBottom: 24,
@@ -2013,7 +2145,7 @@ const styles = StyleSheet.create({
 function StepDot({ active, completed }: { active: boolean, completed: boolean }) {
   return (
     <View style={[
-      styles.stepDot, 
+      styles.stepDot,
       active && styles.stepDotActive,
       completed && styles.stepDotCompleted
     ]} />
