@@ -53,7 +53,10 @@ jobs:
         id: version
         run: |
           VERSION_NAME=$(node -p "require('./package.json').version")
-          VERSION_CODE=$(( ${{ github.run_number }} + 100 ))
+          # Play Console already has earlier manually-uploaded builds using low version codes
+          # like 124/125, so a small offset on github.run_number can collide.
+          # Use a higher monotonic CI-specific range for GitHub Actions releases.
+          VERSION_CODE=$(( 1000 + ${{ github.run_number }} ))
           echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "Building $VERSION_NAME ($VERSION_CODE)"
