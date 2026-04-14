@@ -21,6 +21,7 @@ import { useUser } from "../../context/UserContext";
 import { payoutService } from "../../services/payoutService";
 import { profileService } from "../../services/profileService";
 import { orderService } from "../../services/orderService";
+import { bannerService } from "../../services/bannerService";
 import { LineChart } from "react-native-chart-kit";
 
 const { width } = Dimensions.get("window");
@@ -38,7 +39,8 @@ export default function Earnings() {
   const { authState } = useUser();
   const user = authState.user;
   
-  const [stats, setStats] = useState({ totalEarnings: 0, completedOrders: 0, payouts: [] as any[] });
+  const [stats, setStats] = useState({ totalEarnings: 0, completedOrders: 0, payouts: [] as any[], loginMinutes: 0 });
+  const [fareRule, setFareRule] = useState<any>(null);
 
   const handleWithdraw = () => {
     setShowPayoutModal(true);
@@ -56,17 +58,21 @@ export default function Earnings() {
     const fetchData = async () => {
       if (!user?.id) return;
       try {
-        const [totalPaidRes, statsRes, payoutsRes] = await Promise.all([
+        const [totalPaidRes, statsRes, payoutsRes, dashboardRes, fareRuleRes] = await Promise.all([
           payoutService.getTotalPaid(user.id).catch(() => 0),
           orderService.getStatistics(user.id).catch(() => ({ completedOrders: 0 })),
-          payoutService.getRecentPayouts(user.id, 5).catch(() => ([]))
+          payoutService.getRecentPayouts(user.id, 5).catch(() => ([])),
+          profileService.getDashboard().catch(() => null),
+          profileService.getMyFareRule().catch(() => null),
         ]);
-        
+
         setStats({
            totalEarnings: typeof totalPaidRes === 'number' ? totalPaidRes : (totalPaidRes?.totalPaid || 0),
            completedOrders: statsRes?.completedOrders || 0,
-           payouts: Array.isArray(payoutsRes) ? payoutsRes : []
+           payouts: Array.isArray(payoutsRes) ? payoutsRes : [],
+           loginMinutes: dashboardRes?.dashboard?.totalLoginMinutes ?? 0,
         });
+        if (fareRuleRes?.fareRule) setFareRule(fareRuleRes.fareRule);
       } catch (e) {
         console.warn("Error fetching earnings data", e);
       }
@@ -171,7 +177,11 @@ export default function Earnings() {
                 </View>
                 <View style={styles.vertDivider} />
                 <View style={styles.statBox}>
-                   <Text style={styles.statVal}>0h 0m</Text>
+                   <Text style={styles.statVal}>
+                     {stats.loginMinutes < 60
+                       ? `${stats.loginMinutes}m`
+                       : `${Math.floor(stats.loginMinutes / 60)}h ${stats.loginMinutes % 60}m`}
+                   </Text>
                    <Text style={styles.statLab}>Time Online</Text>
                 </View>
                 <View style={styles.vertDivider} />
@@ -221,6 +231,42 @@ export default function Earnings() {
              </View>
              <Text style={styles.payoutTileAmount}>₹{(stats.totalEarnings ?? 0).toFixed(0)}</Text>
           </TouchableOpacity>
+
+          {/* Fare Rate Card */}
+          {fareRule && (
+            <Animated.View entering={FadeInDown.delay(200)} style={styles.fareCard}>
+              <View style={styles.fareCardHeader}>
+                <MaterialCommunityIcons name="currency-inr" size={18} color="#0E8A63" />
+                <Text style={styles.fareCardTitle}>Your Fare Rate</Text>
+                <View style={styles.fareVehicleBadge}>
+                  <Text style={styles.fareVehicleText}>{fareRule.vehicleType || ''}</Text>
+                </View>
+              </View>
+              <View style={styles.fareRow}>
+                <Text style={styles.fareLabel}>Base Fare</Text>
+                <Text style={styles.fareValue}>₹{fareRule.baseFare ?? '—'}</Text>
+              </View>
+              <View style={styles.fareDivider} />
+              <View style={styles.fareRow}>
+                <Text style={styles.fareLabel}>Includes first</Text>
+                <Text style={styles.fareValue}>{fareRule.baseKm ?? '—'} km</Text>
+              </View>
+              <View style={styles.fareDivider} />
+              <View style={styles.fareRow}>
+                <Text style={styles.fareLabel}>Per extra km</Text>
+                <Text style={styles.fareValue}>₹{fareRule.perKmRate ?? '—'}</Text>
+              </View>
+              {fareRule.rainActive && (
+                <>
+                  <View style={styles.fareDivider} />
+                  <View style={styles.fareRow}>
+                    <Text style={[styles.fareLabel, { color: '#2563EB' }]}>🌧️ Rain Surcharge</Text>
+                    <Text style={[styles.fareValue, { color: '#2563EB' }]}>+₹{fareRule.rainSurcharge ?? '—'}</Text>
+                  </View>
+                </>
+              )}
+            </Animated.View>
+          )}
 
         </ScrollView>
       </SafeAreaView>
@@ -323,4 +369,14 @@ const styles = StyleSheet.create({
   successIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#DCFCE7', justifyContent: 'center', alignItems: 'center' },
   closeBtn: { backgroundColor: '#0A6A4C', width: '100%', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 32 },
   closeBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+
+  fareCard: { backgroundColor: '#F0FDF4', borderRadius: 20, padding: 18, marginTop: 16, borderWidth: 1, borderColor: '#D1FAE5' },
+  fareCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  fareCardTitle: { color: '#0E8A63', fontSize: 15, fontWeight: '800', flex: 1 },
+  fareVehicleBadge: { backgroundColor: '#0E8A63', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
+  fareVehicleText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  fareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+  fareLabel: { color: '#475569', fontSize: 14, fontWeight: '500' },
+  fareValue: { color: '#0F172A', fontSize: 14, fontWeight: '700' },
+  fareDivider: { height: 1, backgroundColor: '#D1FAE5' },
 });

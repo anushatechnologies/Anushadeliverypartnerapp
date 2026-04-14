@@ -1,6 +1,33 @@
 import { apiClient } from './apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const extractArray = (data: any, keys: string[]) => {
+  if (Array.isArray(data)) return data;
+
+  if (data && typeof data === 'object') {
+    for (const key of keys) {
+      if (Array.isArray(data[key])) {
+        return data[key];
+      }
+    }
+  }
+
+  return [];
+};
+
+const extractObject = (data: any, key: string) => {
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const nested = data[key];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      return nested;
+    }
+
+    return data;
+  }
+
+  return {};
+};
+
 export const orderService = {
   // ─── PREFERRED: /api/delivery-app/orders/* ────────────────────────────────
   // These use the JWT bearer token to auto-identify the rider — no ID needed.
@@ -128,19 +155,19 @@ export const orderService = {
   /** GET /api/delivery-orders/delivery-person/{id} — All orders */
   getOrders: async (deliveryPersonId: number) => {
     const res = await apiClient.get(`/api/delivery-orders/delivery-person/${deliveryPersonId}`);
-    return res.data;
+    return extractArray(res.data, ['orders']);
   },
 
   /** GET /api/delivery-orders/delivery-person/{id}/active */
   getActiveOrders: async (deliveryPersonId: number) => {
     const res = await apiClient.get(`/api/delivery-orders/delivery-person/${deliveryPersonId}/active`);
-    return res.data;
+    return extractArray(res.data, ['activeOrders', 'orders']);
   },
 
   /** GET /api/delivery-orders/delivery-person/{id}/completed */
   getCompletedOrders: async (deliveryPersonId: number) => {
     const res = await apiClient.get(`/api/delivery-orders/delivery-person/${deliveryPersonId}/completed`);
-    return res.data;
+    return extractArray(res.data, ['completedOrders', 'orders']);
   },
 
   /** GET /api/delivery-orders/delivery-person/{id}/recent?limit={n} */
@@ -148,7 +175,7 @@ export const orderService = {
     const res = await apiClient.get(
       `/api/delivery-orders/delivery-person/${deliveryPersonId}/recent?limit=${limit}`,
     );
-    return res.data;
+    return extractArray(res.data, ['recentOrders', 'orders']);
   },
 
   /** GET /api/delivery-orders/delivery-person/{id}/statistics */
@@ -156,19 +183,19 @@ export const orderService = {
     const res = await apiClient.get(
       `/api/delivery-orders/delivery-person/${deliveryPersonId}/statistics`,
     );
-    return res.data;
+    return extractObject(res.data, 'statistics');
   },
 
   /** GET /api/delivery-orders/{id} — By numeric ID */
   getOrderById: async (id: number) => {
     const res = await apiClient.get(`/api/delivery-orders/${id}`);
-    return res.data;
+    return extractObject(res.data, 'order');
   },
 
   /** GET /api/delivery-orders/number/{orderNumber} — By order number string */
   getOrderByNumber: async (orderNumber: string) => {
     const res = await apiClient.get(`/api/delivery-orders/number/${encodeURIComponent(orderNumber)}`);
-    return res.data;
+    return extractObject(res.data, 'order');
   },
 
   /**

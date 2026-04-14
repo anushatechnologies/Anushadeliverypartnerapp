@@ -1,7 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging from '@react-native-firebase/messaging';
 import { authService } from './authService';
 import { documentService } from './documentService';
+import { saveDeliveryTokens } from './sessionService';
 import type {
   DeliveryAuthResponse,
   RegistrationDocumentKey,
@@ -54,23 +54,20 @@ export const onboardingService = {
       fcmToken: fcmToken || undefined,
     });
 
-    const accessToken = signupRes.accessToken || signupRes.jwtToken || signupRes.token;
+    const accessToken = signupRes.accessToken || signupRes.jwtToken || signupRes.token || null;
     if (!accessToken) {
       throw new Error('Signup succeeded but JWT token was missing, so document upload could not start.');
     }
 
-    await AsyncStorage.setItem('@anusha_jwt_token', accessToken);
-    if (signupRes.refreshToken) {
-      await AsyncStorage.setItem('@anusha_refresh_token', signupRes.refreshToken);
-    }
+    await saveDeliveryTokens(accessToken, signupRes.refreshToken);
 
     const deliveryPersonId = signupRes.deliveryPersonId;
-    const uploadJobs: Array<{
+    const uploadJobs: {
       key: RegistrationDocumentKey;
       documentType: string;
       documentNumber: string | null;
       fileUri: string;
-    }> = [];
+    }[] = [];
 
     if (uploads.aadhaarFront) {
       uploadJobs.push({

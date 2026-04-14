@@ -187,17 +187,17 @@ export default function Profile() {
                   <Text style={styles.nameText}>{user?.name || "Rider Partner"}</Text>
                   <Text style={styles.phoneText}>
                     {(() => {
-                      const raw = user?.phone || '0000000000';
-                      // Strip leading "91" country-code if stored with it (12 digits)
-                      const normalized = raw.startsWith('91') && raw.length === 12 ? raw.slice(2) : raw;
+                      // Always keep the last 10 digits — handles "+919948598350", "919948598350", "9948598350"
+                      const digits = (user?.phone || '').replace(/\D/g, '');
+                      const normalized = digits.length > 10 ? digits.slice(-10) : (digits || '0000000000');
                       return `+91 ${normalized}`;
                     })()}
                   </Text>
                   <View style={styles.idBadgeMini}>
                     <Text style={styles.idTextMini}>
                       {(() => {
-                        const raw = user?.phone || '0000000000';
-                        const normalized = raw.startsWith('91') && raw.length === 12 ? raw.slice(2) : raw;
+                        const digits = (user?.phone || '').replace(/\D/g, '');
+                        const normalized = digits.length > 10 ? digits.slice(-10) : (digits || '0000000000');
                         return `ID: AB-${normalized.slice(-4)}`;
                       })()}
                     </Text>
@@ -499,7 +499,7 @@ function MenuAction({ icon, label, onPress, value, status, locked }: any) {
           <Text style={[styles.menuLineLabel, locked && { color: '#94A3B8' }]}>{label}</Text>
        </View>
        <View style={styles.menuLineRight}>
-          {value && <Text style={styles.menuLineValue}>{value}</Text>}
+          {value && <Text style={styles.menuLineValue} numberOfLines={1} ellipsizeMode="tail">{value}</Text>}
           {status && (
             <View style={[
               styles.menuStatusBadge,
@@ -954,8 +954,8 @@ const styles = StyleSheet.create({
   menuLineLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   menuLineIconBox: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   menuLineLabel: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
-  menuLineRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  menuLineValue: { color: '#94A3B8', fontSize: 14, fontWeight: '600' },
+  menuLineRight: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, maxWidth: '60%' },
+  menuLineValue: { color: '#94A3B8', fontSize: 14, fontWeight: '600', flexShrink: 1 },
   menuStatusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 5 },
   kycStatusDot: { width: 7, height: 7, borderRadius: 3.5 },
   menuStatusBadgeText: { fontSize: 11, fontWeight: '800', textTransform: 'capitalize' },

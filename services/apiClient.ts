@@ -1,5 +1,5 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getDeliveryAccessToken, refreshDeliverySession } from './sessionService';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.anushatechnologies.com';
 
@@ -10,7 +10,7 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(async (config) => {
   try {
-    const token = await AsyncStorage.getItem('@anusha_jwt_token');
+    const token = await getDeliveryAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -46,65 +46,46 @@ const processQueue = (error: any, token: string | null = null) => {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error?.config;
     const method = originalRequest?.method?.toUpperCase?.() || 'REQUEST';
     const url = `${originalRequest?.baseURL || ''}${originalRequest?.url || ''}`;
+    const requestUrl = originalRequest?.url || '';
+    const isRefreshRequest =
+      requestUrl.includes('/api/delivery/auth/refresh') ||
+      requestUrl.includes('/api/delivery/auth/logout') ||
+      requestUrl.includes('/api/delivery/auth/login') ||
+      requestUrl.includes('/api/delivery/auth/signup');
 
-    // 1. Handle 401 Unauthorized errors (token expired)
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      // Don't refresh if the request was ALREADY to the login or refresh endpoint
-      const isAuthRequest = originalRequest.url.includes('/auth/login') || 
-                            originalRequest.url.includes('/auth/refresh');
-      
-      if (!isAuthRequest) {
-        if (isRefreshing) {
-          return new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          })
-            .then((token) => {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              return apiClient(originalRequest);
-            })
-            .catch((err) => Promise.reject(err));
-        }
-
-        originalRequest._retry = true;
-        isRefreshing = true;
-
-        try {
-          const refreshToken = await AsyncStorage.getItem('@anusha_refresh_token');
-          if (!refreshToken) throw new Error('No refresh token available');
-
-          console.log('[AUTH] Token expired, attempting silent refresh...');
-          
-          // Use a clean axios instance or a direct call to avoid interceptor recursion if possible
-          // But here we'll just use the authService which we know hits the right URL
-          const { authService } = require('./authService');
-          const refreshRes = await authService.refresh(refreshToken);
-          
-          const newToken = refreshRes.accessToken || refreshRes.jwtToken || refreshRes.token;
-          const newRefresh = refreshRes.refreshToken;
-
-          if (newToken) {
-            await AsyncStorage.setItem('@anusha_jwt_token', newToken);
-            if (newRefresh) {
-              await AsyncStorage.setItem('@anusha_refresh_token', newRefresh);
-            }
-            
-            apiClient.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-            
-            processQueue(null, newToken);
+    if (error?.response?.status === 401 && originalRequest && !originalRequest._retry && !isRefreshRequest) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers.Authorization = `Bearer ${token}`;
             return apiClient(originalRequest);
-          }
-        } catch (refreshError) {
-          processQueue(refreshError, null);
-          console.warn('[AUTH] Silent refresh failed, forcing logout');
-          // Optional: You could trigger a global event here to redirect to login
-          return Promise.reject(refreshError);
-        } finally {
-          isRefreshing = false;
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshedToken = await refreshDeliverySession();
+        if (refreshedToken) {
+          originalRequest.headers = originalRequest.headers || {};
+          originalRequest.headers.Authorization = `Bearer ${refreshedToken}`;
+          processQueue(null, refreshedToken);
+          return apiClient(originalRequest);
         }
+        processQueue(error, null);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 

@@ -67,8 +67,8 @@ android {
         applicationId 'com.Anushadeliverypartnerapp'
         minSdkVersion 24
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode project.hasProperty('versionCode') ? project.versionCode.toInteger() : 124
-        versionName project.hasProperty('versionName') ? project.versionName : "2.4.29"
+        versionCode project.hasProperty('versionCode') ? project.versionCode.toInteger() : 125
+        versionName project.hasProperty('versionName') ? project.versionName : "2.4.30"
     }
 
     signingConfigs {

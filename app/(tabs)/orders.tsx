@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useRef, useState } from "react";
 import {
@@ -94,6 +94,7 @@ export default function OrdersTab() {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [fareBreakdown, setFareBreakdown] = useState<any>(null);
 
   // Camera State
   const [showCamera, setShowCamera] = useState(false);
@@ -182,10 +183,16 @@ export default function OrdersTab() {
       distance: backendOrder.distanceKm ? `${Number(backendOrder.distanceKm).toFixed(1)} km` : (backendOrder.distance || "—"),
       earnings: backendOrder.deliveryFee ?? backendOrder.delivery_fee ?? backendOrder.earnings ?? backendOrder.estimatedEarnings ?? 0,
       grandTotal: grandTotal,
-      status: (backendOrder.status === 'DELIVERED' || backendOrder.status === 'COMPLETED' || backendOrder.status === 'CANCELLED') 
-                 ? 'Completed' 
+      status: (backendOrder.status === 'DELIVERED' || backendOrder.status === 'COMPLETED' || backendOrder.status === 'CANCELLED')
+                 ? 'Completed'
                  : 'Active',
-      payment: backendOrder.paymentMethod || backendOrder.paymentMode || 'Online',
+      payment: (() => {
+        const raw = backendOrder.paymentType || backendOrder.paymentMethod || backendOrder.paymentMode || '';
+        if (raw === 'COD') return 'Cash';
+        if (raw === 'UPI') return 'UPI';
+        if (raw === 'ONLINE_PAID' || raw === 'ONLINE') return 'Online';
+        return raw || 'Online';
+      })(),
       otp: backendOrder.deliveryOtp || backendOrder.otp || ""
     };
   };
@@ -254,6 +261,13 @@ export default function OrdersTab() {
   React.useEffect(() => {
     fetchOrders();
   }, [activeTab, user?.id]);
+
+  // Re-fetch every time this tab comes into focus (e.g. after accepting an order from Home tab)
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchOrders();
+    }, [activeTab, user?.id])
+  );
 
   const filteredOrders = orders.filter((o) => o.status === activeTab);
 
@@ -324,15 +338,30 @@ export default function OrdersTab() {
   };
 
   const handleVerifyVendorOtp = async () => {
-    if (!selectedOrder?.vendorOtp || !vendorOtp) return;
+    if (!vendorOtp || !selectedOrder) return;
     setLoading(true);
     try {
-      await orderService.confirmPickup(selectedOrder.orderId, vendorOtp);
+      // Uses /api/delivery-app/orders/{orderNumber}/picked-up — returns fare breakdown
+      const res = await orderService.pickedUpWithOtp(selectedOrder.orderId, vendorOtp);
       setVendorOtpVerified(true);
-      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, pickupConfirmed: true } : o));
-      setSelectedOrder(prev => prev ? { ...prev, pickupConfirmed: true } : prev);
+
+      // Capture fare breakdown from backend response
+      if (res?.fareBreakdown) setFareBreakdown(res.fareBreakdown);
+
+      // Update local order with recalculated distance and earnings
+      const updatedDistance = res?.distanceKm != null
+        ? `${Number(res.distanceKm).toFixed(1)} km`
+        : selectedOrder.distance;
+      const updatedEarnings = res?.deliveryFee ?? selectedOrder.earnings;
+
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id
+        ? { ...o, pickupConfirmed: true, distance: updatedDistance || o.distance, earnings: updatedEarnings ?? o.earnings }
+        : o));
+      setSelectedOrder(prev => prev
+        ? { ...prev, pickupConfirmed: true, distance: updatedDistance || prev.distance, earnings: updatedEarnings ?? prev.earnings }
+        : prev);
     } catch (e: any) {
-      Alert.alert("Invalid OTP", "The pickup code entered is incorrect.");
+      Alert.alert("Invalid OTP", e?.response?.data?.error || "The pickup code entered is incorrect.");
     } finally {
       setLoading(false);
     }
@@ -734,6 +763,40 @@ export default function OrdersTab() {
                     )}
                   </View>
                 </Animated.View>
+              )}
+
+              {/* Fare Breakdown — shown after pickup OTP is verified */}
+              {vendorOtpVerified && fareBreakdown && (
+                <View style={styles.fareBreakdownCard}>
+                  <View style={styles.fareBreakdownHeader}>
+                    <MaterialCommunityIcons name="calculator-variant" size={18} color="#0E8A63" />
+                    <Text style={styles.fareBreakdownTitle}>Your Earnings Breakdown</Text>
+                  </View>
+                  <View style={styles.fareBreakdownRow}>
+                    <Text style={styles.fareBreakdownLabel}>Distance</Text>
+                    <Text style={styles.fareBreakdownValue}>{Number(fareBreakdown.distanceKm || 0).toFixed(1)} km</Text>
+                  </View>
+                  <View style={styles.fareBreakdownRow}>
+                    <Text style={styles.fareBreakdownLabel}>Base Fare ({fareBreakdown.baseKm} km)</Text>
+                    <Text style={styles.fareBreakdownValue}>₹{fareBreakdown.baseFare}</Text>
+                  </View>
+                  {Number(fareBreakdown.extraKm) > 0 && (
+                    <View style={styles.fareBreakdownRow}>
+                      <Text style={styles.fareBreakdownLabel}>+{fareBreakdown.extraKm} km × ₹{fareBreakdown.perKmRate}</Text>
+                      <Text style={styles.fareBreakdownValue}>₹{fareBreakdown.extraCharge}</Text>
+                    </View>
+                  )}
+                  {fareBreakdown.rainActive && (
+                    <View style={styles.fareBreakdownRow}>
+                      <Text style={[styles.fareBreakdownLabel, { color: '#2563EB' }]}>🌧️ Rain Surcharge</Text>
+                      <Text style={[styles.fareBreakdownValue, { color: '#2563EB' }]}>+₹{fareBreakdown.rainSurcharge}</Text>
+                    </View>
+                  )}
+                  <View style={[styles.fareBreakdownRow, { borderTopWidth: 1, borderTopColor: '#D1FAE5', marginTop: 4, paddingTop: 8 }]}>
+                    <Text style={[styles.fareBreakdownLabel, { fontWeight: '800', color: '#0F172A' }]}>Total Earnings</Text>
+                    <Text style={[styles.fareBreakdownValue, { color: '#0E8A63', fontSize: 18, fontWeight: '900' }]}>₹{fareBreakdown.totalFare}</Text>
+                  </View>
+                </View>
               )}
 
               <View style={[styles.stepContainer, selectedOrder?.vendorName && !vendorOtpVerified && styles.stepLocked]}>
@@ -2139,6 +2202,45 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: '#FFFFFF',
+  },
+
+  // Fare breakdown card — shown after pickup OTP verified
+  fareBreakdownCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  fareBreakdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  fareBreakdownTitle: {
+    color: '#0E8A63',
+    fontSize: 14,
+    fontWeight: '800',
+    flex: 1,
+  },
+  fareBreakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  fareBreakdownLabel: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  fareBreakdownValue: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
 

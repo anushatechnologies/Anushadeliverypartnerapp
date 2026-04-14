@@ -1,6 +1,6 @@
 import type { CheckPhoneResponse, DeliveryAuthResponse } from '@/types/partner';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient } from './apiClient';
+import { getDeliveryAccessToken } from './sessionService';
 
 interface SignupPayload {
   firebaseIdToken: string;
@@ -32,8 +32,7 @@ export const authService = {
    * Returns { success, photoUrl, message }.
    */
   uploadProfilePhoto: async (fileUri: string) => {
-    const token = await AsyncStorage.getItem('@anusha_jwt_token');
-    console.log('[PHOTO UPLOAD] Starting upload via Native fetch', { fileUri });
+    const token = await getDeliveryAccessToken();
 
     const formData = new FormData();
     const filename = fileUri.split('/').pop() || 'profile.jpg';

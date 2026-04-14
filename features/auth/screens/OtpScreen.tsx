@@ -13,13 +13,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import messaging from '@react-native-firebase/messaging';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { partnerTheme } from '@/constants/partnerTheme';
 import { useUser, type VerificationStatus } from '@/context/UserContext';
 import { authService } from '@/services/authService';
+import { saveDeliveryTokens } from '@/services/sessionService';
 import { sanitizePhone } from '@/utils/partnerFormatters';
 
 const { width } = Dimensions.get('window');
@@ -48,7 +48,6 @@ export default function OtpScreen() {
   const shakeAnim  = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(0)).current;
   const successOpacity = useRef(new Animated.Value(0)).current;
-  const pulseAnim  = useRef(new Animated.Value(1)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const dotOpacity = useRef([0, 1, 2].map(() => new Animated.Value(0.3))).current;
@@ -136,15 +135,12 @@ export default function OtpScreen() {
             permission === messaging.AuthorizationStatus.AUTHORIZED ||
             permission === messaging.AuthorizationStatus.PROVISIONAL;
           if (canUseFcm) fcmToken = await messaging().getToken();
-        } catch (_) {}
+        } catch {}
 
         const response = await authService.login(idToken, fcmToken || undefined);
-        if (response.jwtToken || response.accessToken) {
-          const accessToken = response.accessToken || response.jwtToken || response.token;
-          await AsyncStorage.setItem('@anusha_jwt_token', accessToken!);
-          if (response.refreshToken) {
-            await AsyncStorage.setItem('@anusha_refresh_token', response.refreshToken);
-          }
+        const accessToken = response.accessToken || response.jwtToken || response.token || null;
+        if (accessToken) {
+          await saveDeliveryTokens(accessToken, response.refreshToken);
         }
 
         const fullName =
@@ -163,8 +159,14 @@ export default function OtpScreen() {
           ? 'rejected'
           : 'pending';
 
+        // Strip +91 / 91 country code before sanitizing so we keep the correct 10 digits.
+        // e.g. "+919948598350" → digits "919948598350" (12) → last 10 → "9948598350"
+        const rawPhone = response.phoneNumber || phone;
+        const allDigits = rawPhone.replace(/\D/g, '');
+        const cleanPhone = allDigits.length > 10 ? allDigits.slice(-10) : (allDigits || phone);
+
         await login(
-          sanitizePhone(response.phoneNumber || phone),
+          cleanPhone,
           {
             id: response.deliveryPersonId,
             name: fullName,

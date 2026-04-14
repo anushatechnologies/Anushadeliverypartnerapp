@@ -1,9 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { profileService } from "../services/profileService";
 import { authService } from "../services/authService";
 import messaging from "@react-native-firebase/messaging";
+import {
+  DELIVERY_ACCESS_TOKEN_KEY,
+  clearDeliveryTokens,
+  logoutDeliverySession,
+  registerDeliverySessionExpiredHandler,
+} from "../services/sessionService";
 
 export type VerificationStatus = "pending" | "approved" | "rejected" | null;
 
@@ -56,11 +61,32 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     isLoading: true,
   });
 
+  const clearPersistedSession = async () => {
+    try {
+      const firebase = require("firebase/compat/app").default;
+      if (firebase) {
+         require("firebase/compat/auth");
+         await firebase.auth().signOut();
+      }
+    } catch(e) {
+      console.warn("Logout Web Auth Error:", e);
+    }
+
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.PROFILE_STATE);
+      await clearDeliveryTokens();
+    } catch(e) {
+      console.warn("AsyncStorage Purge Error:", e);
+    }
+
+    setAuthState({ user: null, verificationStatus: null, isLoggedIn: false, isLoading: false });
+  };
+
   // Session Rehydration — token persists until explicit logout or app uninstall
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const token = await AsyncStorage.getItem('@anusha_jwt_token');
+        const token = await AsyncStorage.getItem(DELIVERY_ACCESS_TOKEN_KEY);
         const cachedProfileStr = await AsyncStorage.getItem(STORAGE_KEYS.PROFILE_STATE);
 
         if (token && cachedProfileStr) {
@@ -106,7 +132,8 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             .catch(async (e) => {
               // Only logout if the server explicitly rejects the token (401)
               if (e?.response?.status === 401) {
-                await AsyncStorage.multiRemove(['@anusha_jwt_token', '@anusha_refresh_token', STORAGE_KEYS.PROFILE_STATE]);
+                await AsyncStorage.removeItem(STORAGE_KEYS.PROFILE_STATE);
+                await clearDeliveryTokens();
                 setAuthState({ user: null, verificationStatus: null, isLoggedIn: false, isLoading: false });
               }
               // Any other error (network, timeout) — keep the user logged in
@@ -118,7 +145,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
               messaging().getToken()
                 .then(tk => { if (tk) authService.saveFcmToken(cachedProfile.user.phone, tk); })
                 .catch(() => {});
-            } catch (_) {}
+            } catch {}
           }
           return;
         }
@@ -157,14 +184,15 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                   messaging().getToken()
                     .then(tk => { if (tk) authService.saveFcmToken(p.phoneNumber, tk); })
                     .catch(() => {});
-                } catch (_) {}
+                } catch {}
               }
               return;
             }
           } catch (e: any) {
             if (e?.response?.status === 401) {
               // Token explicitly rejected — clear and show login
-              await AsyncStorage.multiRemove(['@anusha_jwt_token', '@anusha_refresh_token', STORAGE_KEYS.PROFILE_STATE]);
+              await AsyncStorage.removeItem(STORAGE_KEYS.PROFILE_STATE);
+              await clearDeliveryTokens();
             } else {
               // Network/server error — keep token, show login UI with message
               console.warn("Session restore: network unavailable, will retry on next launch");
@@ -181,6 +209,14 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     initializeAuth();
+
+    const unregisterSessionExpired = registerDeliverySessionExpiredHandler(async () => {
+      await clearPersistedSession();
+    });
+
+    return () => {
+      unregisterSessionExpired();
+    };
   }, []);
 
   const persistProfile = async (newState: Partial<AuthState>) => {
@@ -189,7 +225,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       const { isLoading, isLoggedIn, ...toPersist } = updated;
       await AsyncStorage.setItem(STORAGE_KEYS.PROFILE_STATE, JSON.stringify(toPersist));
       setAuthState(updated);
-    } catch (err) {}
+    } catch {}
   };
 
   const login = async (phone: string, additionalData?: Partial<UserProfile>, verificationStatus?: VerificationStatus) => {
@@ -208,35 +244,8 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     await persistProfile(newState);
   };
   const logout = async () => {
-    try {
-      // 1. Revoke on server if refresh token exists
-      const refreshToken = await AsyncStorage.getItem('@anusha_refresh_token');
-      if (refreshToken) {
-        await authService.logout(refreshToken).catch(() => {});
-      }
-
-      // 2. Local Firebase logout
-      const firebase = require("firebase/compat/app").default;
-      if (firebase) {
-         require("firebase/compat/auth");
-         await firebase.auth().signOut().catch(() => {});
-      }
-    } catch(e) {
-      console.warn("Logout Network/Firebase Error:", e);
-    }
-    
-    try {
-      // 3. Explicitly wipe state and storage
-      await AsyncStorage.multiRemove([
-        STORAGE_KEYS.PROFILE_STATE, 
-        '@anusha_jwt_token', 
-        '@anusha_refresh_token'
-      ]);
-    } catch(e) {
-      console.warn("AsyncStorage Purge Error:", e);
-    }
-
-    setAuthState({ user: null, verificationStatus: null, isLoggedIn: false, isLoading: false });
+    await logoutDeliverySession();
+    await clearPersistedSession();
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {

@@ -37,6 +37,7 @@ import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import PremiumPopup, { PopupType } from "../../components/PremiumPopup";
 import { locationService } from "../../services/locationService";
+import { bannerService, DeliveryBanner } from "../../services/bannerService";
 // FCM foreground notifications (Phase 6)
 let messaging: any = null;
 try {
@@ -56,7 +57,7 @@ export default function Home() {
   const user = authState.user;
   
   // Dashboard Data
-  const [dashboard, setDashboard] = useState({ totalEarnings: 0, activeOrders: 0 });
+  const [dashboard, setDashboard] = useState({ totalEarnings: 0, activeOrders: 0, loginHours: 0 });
   
   const [popup, setPopup] = useState<{visible: boolean, type: PopupType, title: string, message: string}>({
     visible: false, type: "success", title: "", message: ""
@@ -93,6 +94,7 @@ export default function Home() {
         setDashboard({
           totalEarnings: dashboardRes.dashboard.totalEarnings ?? 0,
           activeOrders: dashboardRes.dashboard.weeklyCompletedOrders ?? 0,
+          loginHours: dashboardRes.dashboard.loginHours ?? 0,
         });
       } else {
         // Fallback: derive from payout + active-orders services
@@ -151,7 +153,7 @@ export default function Home() {
           vendor: data.storeName ?? data.pickup ?? 'Store',
           location: data.delivery ?? 'Customer Location',
           distance: data.distanceKm ? `${data.distanceKm} km` : '—',
-          earnings: data.amount ? `₹${data.deliveryFee ?? data.amount}` : '—',
+          earnings: data.deliveryFee ? `₹${data.deliveryFee}` : (data.amount ? `₹${data.amount}` : '—'),
           orderNumber: data.orderNumber ?? '',
         });
         playAlarm();
@@ -442,33 +444,68 @@ export default function Home() {
 
   const scrollRef = useRef<ScrollView>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [dynamicBanners, setDynamicBanners] = useState<DeliveryBanner[]>([]);
 
-  const carouselBanners = [
+  // Static fallback slides shown when no banners are configured in admin
+  const staticBanners = [
     {
-      id: '1',
+      id: 's1',
       title: 'Ride & Earn More',
       subtitle: 'Every delivery brings you closer to your goals',
       image: require('../../assets/images/delivery_person.jpg'),
+      imageUrl: null as string | null,
       overlay: ['rgba(10,106,76,0.72)', 'rgba(14,138,99,0.55)'] as const,
       badge: '🏍️  Fast Delivery',
     },
     {
-      id: '2',
+      id: 's2',
       title: 'Refer & Earn ₹500',
       subtitle: 'Invite a friend — earn when they complete 10 trips',
       image: require('../../assets/refer.jpg'),
+      imageUrl: null as string | null,
       overlay: ['rgba(217,119,6,0.72)', 'rgba(245,158,11,0.55)'] as const,
       badge: '🎁  Referral Bonus',
     },
     {
-      id: '3',
+      id: 's3',
       title: 'Your Partner Journey',
       subtitle: 'Track earnings, grow fast, ride smart every day',
       image: require('../../assets/images/hero_illustration.jpg'),
+      imageUrl: null as string | null,
       overlay: ['rgba(79,70,229,0.72)', 'rgba(99,102,241,0.55)'] as const,
       badge: '📈  Growth Partner',
     },
   ];
+
+  // Overlay palette cycled for dynamic banners
+  const bannerOverlays: readonly (readonly [string, string])[] = [
+    ['rgba(10,106,76,0.72)', 'rgba(14,138,99,0.55)'],
+    ['rgba(217,119,6,0.72)', 'rgba(245,158,11,0.55)'],
+    ['rgba(79,70,229,0.72)', 'rgba(99,102,241,0.55)'],
+    ['rgba(220,38,38,0.72)', 'rgba(239,68,68,0.55)'],
+    ['rgba(124,58,237,0.72)', 'rgba(139,92,246,0.55)'],
+  ];
+
+  const carouselBanners = dynamicBanners.length > 0
+    ? dynamicBanners.map((b, i) => ({
+        id: String(b.id),
+        title: b.name || 'Special Offer',
+        subtitle: b.actionValue || '',
+        image: null as any,
+        imageUrl: b.imageUrl,
+        overlay: bannerOverlays[i % bannerOverlays.length],
+        badge: b.actionType === 'OFFER' ? '🎁  Special Offer'
+             : b.actionType === 'CATEGORY' ? '📦  Explore'
+             : b.actionType === 'PRODUCT' ? '🛍️  Product'
+             : '🏍️  Featured',
+      }))
+    : staticBanners;
+
+  useEffect(() => {
+    bannerService.getActiveBanners().then((banners) => {
+      if (banners.length > 0) setDynamicBanners(banners);
+    });
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -653,7 +690,7 @@ export default function Home() {
               {carouselBanners.map((banner, index) => (
                 <View key={banner.id} style={styles.autoBannerCard}>
                   <ImageBackground
-                    source={banner.image}
+                    source={banner.imageUrl ? { uri: banner.imageUrl } : banner.image}
                     style={styles.bannerImageBg}
                     imageStyle={styles.bannerImageStyle}
                     resizeMode="cover"
@@ -707,14 +744,18 @@ export default function Home() {
               </View>
               <View style={styles.earningsStatsRow}>
                 {/* Login Hours */}
-                <TouchableOpacity 
-                  style={styles.earningsStatItem} 
+                <TouchableOpacity
+                  style={styles.earningsStatItem}
                   activeOpacity={0.7}
                   onPress={() => router.push("/(tabs)/profile")}
                 >
                   <View style={styles.earningsStatTop}>
                     <Text style={styles.earningsStatEmoji}>⏱️</Text>
-                    <Text style={styles.earningsStatValue}>0</Text>
+                    <Text style={styles.earningsStatValue}>
+                      {dashboard.loginHours < 1
+                        ? `${Math.round(dashboard.loginHours * 60)}m`
+                        : `${dashboard.loginHours.toFixed(1)}h`}
+                    </Text>
                   </View>
                   <View style={styles.earningsStatBottom}>
                     <Text style={styles.earningsStatLabel}>Login Hrs</Text>

@@ -55,6 +55,12 @@ export const profileService = {
     return res.data;
   },
 
+  /** GET /api/delivery-app/fare-rule — Returns the fare rule for the rider's vehicle type */
+  getMyFareRule: async () => {
+    const res = await apiClient.get('/api/delivery-app/fare-rule');
+    return res.data;
+  },
+
   /** GET /api/delivery-app/phone/{phoneNumber} — Public/Admin: get delivery person by phone */
   getDeliveryPersonByPhone: async (phoneNumber: string) => {
     const res = await apiClient.get(`/api/delivery-app/phone/${encodeURIComponent(phoneNumber)}`);

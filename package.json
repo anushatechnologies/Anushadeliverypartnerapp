@@ -1,6 +1,6 @@
 {
   "name": "anushabazar",
-  "version": "2.4.18",
+  "version": "2.4.30",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
