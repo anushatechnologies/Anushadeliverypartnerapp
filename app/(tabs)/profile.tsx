@@ -160,7 +160,7 @@ export default function Profile() {
           {/* Profile Premium Header */}
           <Animated.View entering={FadeInDown.duration(600)} style={styles.profileHeaderOuter}>
             <LinearGradient
-              colors={['#10221A', '#153D2E']}
+              colors={['#111827', '#1F2937']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.profileHeaderGradient}
@@ -232,9 +232,9 @@ export default function Profile() {
 
           {isApproved && (
             <TouchableOpacity style={styles.lockedBanner} activeOpacity={0.9} onPress={openLockedSupport}>
-              <MaterialCommunityIcons name="lock-check-outline" size={16} color="#166534" />
+              <MaterialCommunityIcons name="lock-check-outline" size={16} color="#C2410C" />
               <Text style={styles.lockedBannerText}>Account approved — personal, vehicle and bank details are locked. Contact support to modify.</Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color="#166534" />
+              <MaterialCommunityIcons name="chevron-right" size={18} color="#C2410C" />
             </TouchableOpacity>
           )}
 
@@ -421,7 +421,7 @@ export default function Profile() {
         <View style={styles.modalOverlayCenteredAlpha}>
           <Animated.View entering={FadeInDown} style={styles.lockedSupportBox}>
             <View style={styles.lockedSupportIcon}>
-              <MaterialCommunityIcons name="lock-check-outline" size={28} color="#166534" />
+              <MaterialCommunityIcons name="lock-check-outline" size={28} color="#F97316" />
             </View>
             <Text style={styles.lockedSupportTitle}>Contact Admin</Text>
             <Text style={styles.lockedSupportSubtitle}>
@@ -509,7 +509,7 @@ function MenuAction({ icon, label, onPress, value, status, locked }: any) {
                  backgroundColor: status === 'approved' ? '#22C55E' : status === 'rejected' ? '#EF4444' : '#F59E0B'
                }]} />
                <Text style={[styles.menuStatusBadgeText, {
-                 color: status === 'approved' ? '#166534' : status === 'rejected' ? '#991B1B' : '#92400E'
+                 color: status === 'approved' ? '#15803D' : status === 'rejected' ? '#DC2626' : '#C2410C'
                }]}>
                  {status.charAt(0).toUpperCase() + status.slice(1)}
                </Text>
@@ -963,8 +963,8 @@ const styles = StyleSheet.create({
   statCellValue: { fontSize: 18, fontWeight: '900', color: '#FFFFFF' },
   statCellLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
 
-  lockedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#86EFAC', borderRadius: 12, padding: 12, marginBottom: 12 },
-  lockedBannerText: { flex: 1, color: '#166534', fontSize: 12, fontWeight: '600', lineHeight: 18 },
+  lockedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA', borderRadius: 12, padding: 12, marginBottom: 12 },
+  lockedBannerText: { flex: 1, color: '#C2410C', fontSize: 12, fontWeight: '600', lineHeight: 18 },
 
   sectionHeadingRow: { marginBottom: 12, marginLeft: 4 },
   sectionHeaderTitle: { color: '#64748B', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
@@ -1017,8 +1017,8 @@ const styles = StyleSheet.create({
   lockedSupportSubtitle: { color: '#64748B', fontSize: 14, fontWeight: '600', lineHeight: 22, textAlign: 'center', marginTop: 10, marginBottom: 22 },
   lockedSupportPrimary: { height: 58, borderRadius: 18, backgroundColor: '#F97316', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
   lockedSupportPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
-  lockedSupportSecondary: { height: 58, borderRadius: 18, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
-  lockedSupportSecondaryText: { color: '#166534', fontSize: 16, fontWeight: '900' },
+  lockedSupportSecondary: { height: 58, borderRadius: 18, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
+  lockedSupportSecondaryText: { color: '#C2410C', fontSize: 16, fontWeight: '900' },
   lockedSupportClose: { height: 54, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   lockedSupportCloseText: { color: '#475569', fontSize: 15, fontWeight: '800' },
   logoutConfirmationBox: { backgroundColor: '#FFFFFF', borderRadius: 36, padding: 32, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 12 },

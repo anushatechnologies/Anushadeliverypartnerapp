@@ -58,6 +58,7 @@ export default function Home() {
   
   // Dashboard Data
   const [dashboard, setDashboard] = useState({ totalEarnings: 0, activeOrders: 0, loginHours: 0 });
+  const [riderLocation, setRiderLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   
   const [popup, setPopup] = useState<{visible: boolean, type: PopupType, title: string, message: string}>({
     visible: false, type: "success", title: "", message: ""
@@ -110,8 +111,19 @@ export default function Home() {
     getIgnoreKeys(order).forEach((key) => ignoredOrderIdsRef.current.add(key));
   };
   
+  const fetchRiderLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setRiderLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      }
+    } catch { /* location unavailable */ }
+  };
+
   const fetchDashboard = async () => {
     if (!user?.id) return;
+    fetchRiderLocation();
     try {
       // Try the dedicated dashboard endpoint first (fastest, single call)
       const [dashboardRes, statusRes] = await Promise.all([
@@ -545,7 +557,7 @@ export default function Home() {
       subtitle: 'Every delivery brings you closer to your goals',
       image: require('../../assets/images/delivery_person.jpg'),
       imageUrl: null as string | null,
-      overlay: ['rgba(10,106,76,0.72)', 'rgba(14,138,99,0.55)'] as const,
+      overlay: ['rgba(249,115,22,0.72)', 'rgba(251,146,60,0.55)'] as const,
       badge: '🏍️  Fast Delivery',
     },
     {
@@ -570,7 +582,7 @@ export default function Home() {
 
   // Overlay palette cycled for dynamic banners
   const bannerOverlays: readonly (readonly [string, string])[] = [
-    ['rgba(10,106,76,0.72)', 'rgba(14,138,99,0.55)'],
+    ['rgba(249,115,22,0.72)', 'rgba(251,146,60,0.55)'],
     ['rgba(217,119,6,0.72)', 'rgba(245,158,11,0.55)'],
     ['rgba(79,70,229,0.72)', 'rgba(99,102,241,0.55)'],
     ['rgba(220,38,38,0.72)', 'rgba(239,68,68,0.55)'],
@@ -825,12 +837,46 @@ export default function Home() {
             </View>
           </View>
 
+          {/* Rider Live Location Map */}
+          {riderLocation && (
+            <View style={styles.mapCardOuter}>
+              <View style={styles.mapCardInner}>
+                <MapView
+                  provider={PROVIDER_DEFAULT}
+                  style={{ flex: 1 }}
+                  region={{
+                    latitude: riderLocation.latitude,
+                    longitude: riderLocation.longitude,
+                    latitudeDelta: 0.008,
+                    longitudeDelta: 0.008,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                >
+                  <Marker coordinate={riderLocation} title="You are here">
+                    <View style={styles.riderMarker}>
+                      <MaterialCommunityIcons name="motorbike" size={20} color="#fff" />
+                    </View>
+                  </Marker>
+                </MapView>
+                <View style={styles.mapLabelBadge}>
+                  <MaterialCommunityIcons name="crosshairs-gps" size={14} color="#F97316" />
+                  <Text style={styles.mapLabelText}>Your Location</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Total Earnings Section */}
           <View style={styles.earningsSection}>
-            <Text style={styles.earningsSectionTitle}>Total Earnings</Text>
+            <Text style={styles.earningsSectionTitle}>Today's Summary</Text>
             <View style={styles.earningsCard}>
               <View style={styles.earningsCardHeader}>
-                <Text style={styles.earningsMotivation}>Deliver Orders to Start Earning</Text>
+                <Text style={styles.earningsMotivation}>
+                  {dashboard.totalEarnings > 0
+                    ? `Great work! ₹${Number(dashboard.totalEarnings).toFixed(0)} earned`
+                    : 'Deliver Orders to Start Earning'}
+                </Text>
                 <Text style={styles.earningsMotivationEmoji}>💰</Text>
               </View>
               <View style={styles.earningsStatsRow}>
@@ -1054,7 +1100,7 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerIconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   powerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 4 },
-  powerBtnOnline: { backgroundColor: '#22C55E', shadowColor: '#22C55E' },
+  powerBtnOnline: { backgroundColor: '#F97316', shadowColor: '#F97316' },
   powerBtnOffline: { backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#94A3B8' },
   notifBadge: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: '#0F172A' },
 
@@ -1076,7 +1122,7 @@ const styles = StyleSheet.create({
 
   // ── Total Earnings Section ──
   earningsSection: { marginBottom: 24, marginTop: 8, borderRadius: 20, overflow: 'hidden', backgroundColor: '#1E293B', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
-  earningsSectionTitle: { fontSize: 18, fontWeight: '900', color: '#A78BFA', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 12, letterSpacing: -0.3 },
+  earningsSectionTitle: { fontSize: 18, fontWeight: '900', color: '#F97316', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 12, letterSpacing: -0.3 },
   earningsCard: { backgroundColor: '#FFFFFF', borderRadius: 18, marginHorizontal: 12, marginBottom: 14, paddingTop: 20, paddingBottom: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
   earningsCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 18 },
   earningsMotivation: { fontSize: 17, fontWeight: '800', color: '#1E293B', flex: 1, letterSpacing: -0.3 },
@@ -1088,7 +1134,7 @@ const styles = StyleSheet.create({
   earningsStatEmoji: { fontSize: 22 },
   earningsStatValue: { fontSize: 20, fontWeight: '900', color: '#1E293B' },
   earningsStatBottom: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  earningsStatLabel: { fontSize: 12, fontWeight: '700', color: '#7C3AED' },
+  earningsStatLabel: { fontSize: 12, fontWeight: '700', color: '#F97316' },
   earningsStatDivider: { width: 1, height: 40, backgroundColor: '#E2E8F0', marginHorizontal: 4 },
   totalEarningsBadge: { backgroundColor: '#1E293B', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6 },
   totalEarningsBadgeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
@@ -1100,13 +1146,16 @@ const styles = StyleSheet.create({
   pulseDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#EF4444' },
   liveText: { color: '#EF4444', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
 
-  mapCardOuter: { width: '100%', marginBottom: 28, borderRadius: 28, padding: 4, backgroundColor: '#FFFFFF', elevation: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 12 },
-  mapCardInner: { width: '100%', height: 210, borderRadius: 24, overflow: 'hidden' },
+  mapCardOuter: { width: '100%', marginBottom: 20, borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#F97316', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 },
+  mapCardInner: { width: '100%', height: 190, borderRadius: 24, overflow: 'hidden' },
   mapImg: { width: '100%', height: '100%' },
   mapOverlayBlur: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
-  demandBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(124, 58, 237, 0.9)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14 },
+  demandBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(249,115,22,0.9)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14 },
   demandText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14, letterSpacing: -0.2 },
   mapExpandBtn: { position: 'absolute', bottom: 12, right: 12, width: 48, height: 48, borderRadius: 16, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6 },
+  riderMarker: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center', borderWidth: 2.5, borderColor: '#fff', elevation: 6, shadowColor: '#F97316', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.5, shadowRadius: 6 },
+  mapLabelBadge: { position: 'absolute', bottom: 10, left: 12, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.92)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#FED7AA' },
+  mapLabelText: { color: '#F97316', fontSize: 12, fontWeight: '800' },
 
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 20 },
   quickActionTile: { width: (width - 54) / 2, borderRadius: 22, padding: 18, alignItems: 'center', gap: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },

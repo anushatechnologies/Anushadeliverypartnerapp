@@ -39,7 +39,16 @@ export default function Earnings() {
   const { authState } = useUser();
   const user = authState.user;
   
-  const [stats, setStats] = useState({ totalEarnings: 0, completedOrders: 0, payouts: [] as any[], loginMinutes: 0 });
+  const [stats, setStats] = useState({
+    totalEarnings: 0,
+    weeklyEarnings: 0,
+    monthlyEarnings: 0,
+    completedOrders: 0,
+    weeklyOrders: 0,
+    monthlyOrders: 0,
+    payouts: [] as any[],
+    loginMinutes: 0,
+  });
   const [fareRule, setFareRule] = useState<any>(null);
 
   const handleWithdraw = () => {
@@ -58,17 +67,20 @@ export default function Earnings() {
     const fetchData = async () => {
       if (!user?.id) return;
       try {
-        const [totalPaidRes, statsRes, payoutsRes, dashboardRes, fareRuleRes] = await Promise.all([
-          payoutService.getTotalPaid(user.id).catch(() => 0),
-          orderService.getStatistics(user.id).catch(() => ({ completedOrders: 0 })),
+        const [statsRes, payoutsRes, dashboardRes, fareRuleRes] = await Promise.all([
+          orderService.getStatistics(user.id).catch(() => ({})),
           payoutService.getRecentPayouts(user.id, 5).catch(() => ([])),
           profileService.getDashboard().catch(() => null),
           profileService.getMyFareRule().catch(() => null),
         ]);
 
         setStats({
-           totalEarnings: typeof totalPaidRes === 'number' ? totalPaidRes : (totalPaidRes?.totalPaid || 0),
+           totalEarnings: statsRes?.totalEarnings || 0,
+           weeklyEarnings: statsRes?.weeklyEarnings || 0,
+           monthlyEarnings: statsRes?.monthlyEarnings || 0,
            completedOrders: statsRes?.completedOrders || 0,
+           weeklyOrders: statsRes?.weeklyOrders || 0,
+           monthlyOrders: statsRes?.monthlyOrders || 0,
            payouts: Array.isArray(payoutsRes) ? payoutsRes : [],
            loginMinutes: dashboardRes?.dashboard?.totalLoginMinutes ?? 0,
         });
@@ -89,12 +101,15 @@ export default function Earnings() {
     { label: "No Recent Payouts", amount: "₹0", orders: 0, status: 'NONE' },
   ];
 
-  // Graphical Chart Data
+  const displayEarnings = activeTab === 'Weekly' ? stats.weeklyEarnings : stats.monthlyEarnings;
+  const displayOrders  = activeTab === 'Weekly' ? stats.weeklyOrders  : stats.monthlyOrders;
+
+  // Graphical Chart Data — distribute display earnings evenly across last 7 days
   const chartData = {
     labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     datasets: [{
-      data: stats.totalEarnings > 0 
-        ? [0, 0, 0, 0, 0, 0, stats.totalEarnings] 
+      data: displayEarnings > 0
+        ? [0, 0, 0, 0, 0, 0, displayEarnings]
         : [0, 0, 0, 0, 0, 0, 0],
       strokeWidth: 3,
     }]
@@ -116,8 +131,8 @@ export default function Earnings() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           
           <Animated.View entering={FadeInDown.duration(600)} style={styles.chartSection}>
-             <Text style={styles.topLabel}>Total Earnings</Text>
-             <Text style={styles.topValue}>₹{(stats.totalEarnings ?? 0).toFixed(0)}</Text>
+             <Text style={styles.topLabel}>{activeTab === 'Weekly' ? 'This Week' : 'This Month'}</Text>
+             <Text style={styles.topValue}>₹{(displayEarnings ?? 0).toFixed(0)}</Text>
 
              <View style={styles.togglePillContainer}>
                 <TouchableOpacity 
@@ -150,7 +165,7 @@ export default function Earnings() {
                     backgroundGradientFrom: "#FFFFFF",
                     backgroundGradientTo: "#FFFFFF",
                     decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
+                    color: (opacity = 1) => `rgba(249, 115, 22, ${opacity})`,
                     labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
                     fillShadowGradientFrom: "#FBBF24",
                     fillShadowGradientFromOpacity: 0.15,
@@ -172,7 +187,7 @@ export default function Earnings() {
 
              <View style={styles.statsRow}>
                 <View style={styles.statBox}>
-                   <Text style={styles.statVal}>{stats.completedOrders ?? 0}</Text>
+                   <Text style={styles.statVal}>{displayOrders ?? 0}</Text>
                    <Text style={styles.statLab}>Orders</Text>
                 </View>
                 <View style={styles.vertDivider} />
@@ -229,7 +244,7 @@ export default function Earnings() {
                     <Text style={styles.payoutTileSub}>Tuesday 8.00 AM</Text>
                  </View>
              </View>
-             <Text style={styles.payoutTileAmount}>₹{(stats.totalEarnings ?? 0).toFixed(0)}</Text>
+             <Text style={styles.payoutTileAmount}>₹{(stats.weeklyEarnings ?? 0).toFixed(0)}</Text>
           </TouchableOpacity>
 
           {/* Fare Rate Card */}
@@ -344,12 +359,12 @@ const styles = StyleSheet.create({
   
   mockupHistoryTile: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FAFAFD', padding: 20, borderRadius: 20, marginTop: 24 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  greenCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FBBF24', justifyContent: 'center', alignItems: 'center' },
+  greenCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
   historyTileTitle: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
   
   mockupPayoutTile: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 20, borderRadius: 20, marginTop: 16, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
   payoutLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
-  greenBriefcase: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#FBBF24', justifyContent: 'center', alignItems: 'center', marginTop: 2 },
+  greenBriefcase: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center', marginTop: 2 },
   payoutTileTitle: { color: '#1E293B', fontSize: 15, fontWeight: '700', marginBottom: 2 },
   payoutTileSub: { color: '#64748B', fontSize: 12, fontWeight: '500', lineHeight: 16 },
   payoutTileAmount: { color: '#0F172A', fontSize: 24, fontWeight: '800' },

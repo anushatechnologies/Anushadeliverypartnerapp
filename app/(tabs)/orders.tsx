@@ -97,8 +97,6 @@ export default function OrdersTab() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [scannerVisible, setScannerVisible] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
   const [fareBreakdown, setFareBreakdown] = useState<any>(null);
 
   // Camera State
@@ -269,8 +267,6 @@ export default function OrdersTab() {
     setDeliveryPhoto(latestOrder.deliveryPhotoUrl || null);
     setPaymentConfirmed(false);
     setPaymentMethod(null);
-    setSendingOtp(false);
-    setOtpSent(Boolean(latestOrder.deliveryOtpSent));
     setFareBreakdown(null);
     setOtpModal(true);
   };
@@ -391,46 +387,16 @@ export default function OrdersTab() {
     }
   };
 
-  const handleSendOtp = async () => {
-    if (!selectedOrder?.orderId) return;
-    if (!selectedOrder.pickupConfirmed && !vendorOtpVerified) {
-      Alert.alert("Pickup Required", "Verify pickup from the vendor before sending customer OTP.");
-      return;
-    }
-    setSendingOtp(true);
-    try {
-      const res = await orderService.generateDeliveryOtp(selectedOrder.orderId);
-      setOtpSent(true);
-      setSelectedOrder(prev => prev ? {
-        ...prev,
-        otp: res?.otp || prev.otp,
-        deliveryOtpSent: true,
-      } : prev);
-      // In dev mode show the OTP returned by the server so testers can confirm delivery
-      if (res?.otp) {
-        Alert.alert('OTP Sent', `Customer OTP sent successfully.\n\nDev OTP: ${res.otp}`);
-      } else {
-        Alert.alert('OTP Sent', 'A delivery OTP has been sent to the customer.');
-      }
-    } catch (e: any) {
-      Alert.alert('Failed', e?.response?.data?.error || e?.message || 'Could not generate delivery OTP.');
-    } finally {
-      setSendingOtp(false);
-    }
-  };
 
   const handleVerifyVendorOtp = async () => {
     if (!vendorOtp || !selectedOrder) return;
     setLoading(true);
     try {
-      // Uses /api/delivery-app/orders/{orderNumber}/picked-up — returns fare breakdown
       const res = await orderService.pickedUpWithOtp(selectedOrder.orderId, vendorOtp);
       setVendorOtpVerified(true);
 
-      // Capture fare breakdown from backend response
       if (res?.fareBreakdown) setFareBreakdown(res.fareBreakdown);
 
-      // Update local order with recalculated distance and earnings
       const updatedDistance = res?.distanceKm != null
         ? `${Number(res.distanceKm).toFixed(1)} km`
         : selectedOrder.distance;
@@ -442,6 +408,13 @@ export default function OrdersTab() {
       setSelectedOrder(prev => prev
         ? { ...prev, pickupConfirmed: true, distance: updatedDistance || prev.distance, earnings: updatedEarnings ?? prev.earnings }
         : prev);
+
+      // Auto-generate delivery OTP so customer receives it immediately after pickup
+      try {
+        await orderService.generateDeliveryOtp(selectedOrder.orderId);
+      } catch (otpErr) {
+        console.warn("Auto delivery OTP generation failed:", otpErr);
+      }
     } catch (e: any) {
       Alert.alert("Invalid OTP", e?.response?.data?.error || "The pickup code entered is incorrect.");
     } finally {
@@ -695,7 +668,9 @@ export default function OrdersTab() {
                 </View>
                 <View style={styles.billRow}>
                   <Text style={styles.billLabel}>Rider Earnings</Text>
-                  <Text style={styles.billVal}>₹0</Text>
+                  <Text style={[styles.billVal, { color: '#F97316', fontWeight: '800' }]}>
+                    {selectedDetailOrder?.earnings ? `₹${selectedDetailOrder.earnings}` : '—'}
+                  </Text>
                 </View>
                 <View style={[styles.billRow, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}>
                   <Text style={styles.billTotalLabel}>Grand Total</Text>
@@ -946,33 +921,26 @@ export default function OrdersTab() {
                   />
                   <TextInput
                     style={styles.otpInputField}
-                    placeholder="Enter 4-digit secret code"
+                    placeholder="Enter 4-digit customer code"
                     placeholderTextColor="#94A3B8"
                     keyboardType="number-pad"
                     maxLength={4}
                     value={otp}
                     onChangeText={setOtp}
-                    editable={!!deliveryPhoto && !!otpSent && !otpVerified}
+                    editable={!!deliveryPhoto && !otpVerified}
                     autoCorrect={false}
                     autoComplete="off"
                     spellCheck={false}
                   />
-                  {!!deliveryPhoto && !otpSent && !otpVerified && (
-                    <TouchableOpacity onPress={handleSendOtp} style={styles.verifyOtpBtn} disabled={sendingOtp}>
-                      <Text style={styles.verifyOtpBtnText}>
-                        {sendingOtp ? "Sending..." : "Send OTP"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  {otpSent && otp.length === 4 && !otpVerified && (
+                  {!!deliveryPhoto && otp.length === 4 && !otpVerified && (
                     <TouchableOpacity onPress={handleVerifyOtp} style={styles.verifyOtpBtn}>
                       <Text style={styles.verifyOtpBtnText}>Verify</Text>
                     </TouchableOpacity>
                   )}
                 </View>
-                {!!deliveryPhoto && otpSent && !otpVerified && (
+                {!!deliveryPhoto && !otpVerified && (
                   <Text style={styles.otpHelperText}>
-                    Customer OTP has been sent. Ask the customer for the 4-digit code and verify it here.
+                    Ask the customer for their 4-digit delivery code and enter it here.
                   </Text>
                 )}
               </Animated.View>
@@ -1267,24 +1235,29 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
           </View>
         </View>
 
+        {/* Navigation button — always visible for active orders */}
+        {!isCompleted && (
+          <TouchableOpacity
+            onPress={() => {
+              const targetCoords = !order.pickupConfirmed ? order.vendorCoords : order.customerCoords;
+              const navAddress = (!order.pickupConfirmed && order.vendorAddress) ? order.vendorAddress : order.address;
+              const mapsUrl = targetCoords
+                ? `https://www.google.com/maps/dir/?api=1&destination=${targetCoords.latitude},${targetCoords.longitude}`
+                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(navAddress)}`;
+              Linking.openURL(mapsUrl);
+            }}
+            style={styles.navBtn}
+          >
+            <MaterialCommunityIcons name="navigation-variant" size={18} color="#F97316" />
+            <Text style={styles.navBtnText}>
+              {!order.pickupConfirmed ? 'Navigate to Store' : 'Navigate to Customer'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Actions */}
         {!isCompleted && (
           <View style={styles.actionRow}>
-            <TouchableOpacity
-              onPress={() => {
-                const targetCoords = !order.pickupConfirmed ? order.vendorCoords : order.customerCoords;
-                const navAddress = (!order.pickupConfirmed && order.vendorAddress) ? order.vendorAddress : order.address;
-                const mapsUrl = targetCoords
-                  ? `https://www.google.com/maps/dir/?api=1&destination=${targetCoords.latitude},${targetCoords.longitude}`
-                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(navAddress)}`;
-                Linking.openURL(mapsUrl);
-              }}
-              style={styles.mapActionBtn}
-            >
-              <MaterialCommunityIcons name="google-maps" size={20} color="#1E293B" />
-              <Text style={styles.mapActionText}>Map</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               onPress={onVerify}
               style={styles.primaryActionBtn}
@@ -1416,7 +1389,21 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   metaCapsuleText: { fontSize: 11, fontWeight: '800', color: '#475569' },
-  actionRow: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  navBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 16,
+    alignSelf: 'flex-start',
+  },
+  navBtnText: { fontSize: 13, fontWeight: '800', color: '#F97316' },
+  actionRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
   roundActionBtn: {
     width: 56,
     height: 56,
