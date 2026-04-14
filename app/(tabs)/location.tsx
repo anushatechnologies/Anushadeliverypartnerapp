@@ -16,7 +16,7 @@ import * as Location from "expo-location";
 import { useUser } from "../../context/UserContext";
 import { locationService } from "../../services/locationService";
 
-const GREEN_PRIMARY = '#0E8A63';
+const GREEN_PRIMARY = '#F97316';
 const GREEN_DARK = '#10221A';
 const GREEN_MUTED = '#153D2E';
 
@@ -24,7 +24,7 @@ const mapStyle = [
   { elementType: "geometry", stylers: [{ color: "#0D1F1A" }] },
   { elementType: "labels.text.fill", stylers: [{ color: "#6B8F7A" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#0D1F1A" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#0E8A63" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#F97316" }] },
   { featureType: "poi", stylers: [{ visibility: "off" }] },
   { featureType: "road", elementType: "geometry", stylers: [{ color: "#1A2E24" }] },
   { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#122018" }] },

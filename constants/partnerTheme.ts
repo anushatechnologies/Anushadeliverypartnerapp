@@ -1,23 +1,23 @@
 export const partnerTheme = {
   colors: {
-    canvas: '#F4F8F3',
-    canvasAlt: '#EEF5EC',
+    canvas: '#FFF7ED',
+    canvasAlt: '#FFF3E0',
     surface: '#FFFFFF',
-    surfaceMuted: '#F7FAF7',
-    text: '#10221A',
-    textMuted: '#5D6F67',
-    textSoft: '#8A9B93',
-    primary: '#0E8A63',
-    primaryDark: '#0A6A4C',
-    accent: '#F59E0B',
-    accentSoft: '#FFF3D6',
-    border: '#D8E5DC',
-    borderStrong: '#BCD1C3',
+    surfaceMuted: '#FFF9F4',
+    text: '#111827',
+    textMuted: '#4B5563',
+    textSoft: '#9CA3AF',
+    primary: '#F97316',
+    primaryDark: '#C2410C',
+    accent: '#FBBF24',
+    accentSoft: '#FEF3C7',
+    border: '#FED7AA',
+    borderStrong: '#FDBA74',
     success: '#16A34A',
     danger: '#DC2626',
     info: '#2563EB',
-    shadow: 'rgba(16, 34, 26, 0.08)',
-    glow: 'rgba(14, 138, 99, 0.12)',
+    shadow: 'rgba(249, 115, 22, 0.10)',
+    glow: 'rgba(249, 115, 22, 0.15)',
   },
   radius: {
     sm: 14,
@@ -36,5 +36,5 @@ export const partnerTheme = {
   },
 };
 
-export const partnerGradient = ['#0E8A63', '#14A06D'] as const;
-export const partnerHeroGradient = ['#10221A', '#153D2E'] as const;
+export const partnerGradient = ['#F97316', '#C2410C'] as const;
+export const partnerHeroGradient = ['#111827', '#1F2937'] as const;

@@ -33,11 +33,20 @@ export const orderService = {
   // These use the JWT bearer token to auto-identify the rider — no ID needed.
 
   /**
-   * GET /api/delivery-app/available-orders
+   * GET /api/delivery-app/broadcasts/available
    * Returns currently broadcasted orders the rider can accept.
    */
   getAvailableOrders: async () => {
-    const res = await apiClient.get('/api/delivery-app/available-orders');
+    const res = await apiClient.get('/api/delivery-app/broadcasts/available');
+    return extractArray(res.data, ['broadcasts', 'orders']);
+  },
+
+  /**
+   * POST /api/delivery-app/broadcasts/{broadcastId}/accept
+   * Accept a broadcasted order using the FCFS broadcast id.
+   */
+  acceptBroadcastFromApp: async (broadcastId: number | string) => {
+    const res = await apiClient.post(`/api/delivery-app/broadcasts/${broadcastId}/accept`);
     return res.data;
   },
 
@@ -123,7 +132,7 @@ export const orderService = {
     const data = await response.json();
 
     if (!response.ok) {
-       throw new Error(data?.message || 'Failed to confirm delivery');
+       throw new Error(data?.error || data?.message || 'Failed to confirm delivery');
     }
     return data;
   },

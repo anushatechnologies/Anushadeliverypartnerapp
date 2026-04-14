@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: 999,
-    backgroundColor: 'rgba(14, 138, 99, 0.12)',
+    backgroundColor: 'rgba(249, 115, 22, 0.14)',
   },
   orbSecondary: {
     position: 'absolute',
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 999,
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    backgroundColor: 'rgba(251, 191, 36, 0.12)',
   },
   scrollContent: {
     paddingHorizontal: 20,

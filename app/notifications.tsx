@@ -48,7 +48,7 @@ export default function NotificationsScreen() {
         desc: n.message || n.body || n.content || n.description || "You have a new message.",
         time: "Recently", // Ideally parsing n.createdAt or n.timestamp
         icon: n.icon || "bell-ring-outline",
-        color: "#0E8A63"
+        color: "#F97316"
       }));
       setNotifications(mapped);
     } catch (error) {
@@ -69,7 +69,7 @@ export default function NotificationsScreen() {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
            {loading ? (
-             <ActivityIndicator size="large" color="#0E8A63" style={{ marginTop: 50 }} />
+             <ActivityIndicator size="large" color="#F97316" style={{ marginTop: 50 }} />
            ) : notifications.length === 0 ? (
              <View style={{ alignItems: 'center', marginTop: 50 }}>
                <MaterialCommunityIcons name="bell-off-outline" size={48} color="#D1D5DB" />

@@ -17,7 +17,7 @@ export default function HelpScreen() {
     {
       category: "Getting Started",
       icon: "rocket-launch-outline" as const,
-      color: "#14A06D",
+      color: "#FB923C",
       faqs: [
         { q: "How do I start accepting orders?", a: "Toggle the 'Online' switch on the home screen. Once online, you'll receive order notifications automatically based on your current location and proximity to vendors." },
         { q: "What documents are required for verification?", a: "You need to upload your Aadhaar Card, PAN Card, and Driving License along with clear photos of each document. Your profile photo taken via selfie is also required." },
@@ -28,7 +28,7 @@ export default function HelpScreen() {
     {
       category: "Orders & Deliveries",
       icon: "package-variant-closed" as const,
-      color: "#10B981",
+      color: "#FBBF24",
       faqs: [
         { q: "What happens when I receive a new order?", a: "When a new order is assigned, you'll see a notification with pickup location, drop location, estimated distance, and earnings. You can accept or reject the order with a valid reason." },
         { q: "Can I reject an order?", a: "Yes, you can reject orders but you must provide a valid reason (Vehicle Breakdown, Out of Fuel, Too Far, Personal Emergency, or Other). Frequent rejections may affect your rating." },
@@ -52,7 +52,7 @@ export default function HelpScreen() {
     {
       category: "Account & Profile",
       icon: "account-cog-outline" as const,
-      color: "#0E8A63",
+      color: "#F97316",
       faqs: [
         { q: "How do I update my profile photo?", a: "Go to Profile tab, tap on your profile photo, and take a new selfie or upload from gallery. Note: Once your profile is verified, photo changes require admin re-approval." },
         { q: "My vehicle has changed, how do I update?", a: "Go to Profile > Vehicle Information to update your vehicle type, model, and registration number. New vehicle details may require re-verification." },
@@ -106,12 +106,15 @@ export default function HelpScreen() {
            {/* Search */}
            <View style={styles.searchBox}>
               <MaterialCommunityIcons name="magnify" size={22} color="#9CA3AF" />
-              <TextInput 
-                placeholder="Search for help..." 
-                style={styles.searchInput} 
-                placeholderTextColor="#9CA3AF" 
+              <TextInput
+                placeholder="Search for help..."
+                style={styles.searchInput}
+                placeholderTextColor="#9CA3AF"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                autoCorrect={false}
+                autoComplete="off"
+                spellCheck={false}
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -126,7 +129,7 @@ export default function HelpScreen() {
                 style={[styles.contactCard, { backgroundColor: '#F0FDF4' }]} 
                 onPress={() => Linking.openURL('tel:6309981555')}
               >
-                 <View style={[styles.contactIconBox, { backgroundColor: '#0E8A63' }]}>
+                 <View style={[styles.contactIconBox, { backgroundColor: '#F97316' }]}>
                     <MaterialCommunityIcons name="phone" size={24} color="#fff" />
                  </View>
                  <Text style={styles.contactLabel}>Call Us</Text>
@@ -236,7 +239,7 @@ export default function HelpScreen() {
            {/* Still Need Help */}
            <View style={styles.helpCard}>
               <View style={styles.helpHead}>
-                 <MaterialCommunityIcons name="headphones" size={30} color="#0E8A63" />
+                 <MaterialCommunityIcons name="headphones" size={30} color="#F97316" />
                  <Text style={styles.helpTitle}>Still need help?</Text>
               </View>
               <Text style={styles.helpDesc}>Our support team is available 24/7 to assist you with any delivery issues.</Text>
@@ -302,6 +305,6 @@ const styles = StyleSheet.create({
   helpHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   helpTitle: { fontSize: 20, fontWeight: '900', color: '#1A1A1A' },
   helpDesc: { textAlign: 'center', color: '#6B7280', fontSize: 14, lineHeight: 22, marginBottom: 24 },
-  supportBtn: { backgroundColor: '#0E8A63', width: '100%', height: 56, borderRadius: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, shadowColor: '#0E8A63', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
+  supportBtn: { backgroundColor: '#F97316', width: '100%', height: 56, borderRadius: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, shadowColor: '#F97316', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
   supportBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
 });

@@ -64,7 +64,15 @@ export default function Home() {
   });
   
   // Incoming Order State (Should fetch from backend in production)
-  const [incomingOrder, setIncomingOrder] = useState<{ id: string, vendor: string, location: string, distance: string, earnings: string, orderNumber: string } | null>(null);
+  const [incomingOrder, setIncomingOrder] = useState<{
+    id: string,
+    broadcastId?: string,
+    vendor: string,
+    location: string,
+    distance: string,
+    earnings: string,
+    orderNumber: string
+  } | null>(null);
   
   // Rejection State
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -75,6 +83,32 @@ export default function Home() {
   // Rejected Orders History
   const [rejectedOrders, setRejectedOrders] = useState<{ id: string, reason: string, time: string }[]>([]);
   const ignoredOrderIdsRef = useRef<Set<string>>(new Set());
+
+  const getIgnoreKeys = (order: any) => {
+    const keys = new Set<string>();
+    const id = order?.id?.toString?.() || order?.orderId?.toString?.();
+    const orderNumber = order?.orderNumber?.toString?.();
+    const broadcastId = order?.broadcastId?.toString?.();
+
+    if (id) keys.add(`order:${id}`);
+    if (orderNumber) keys.add(`orderNumber:${orderNumber}`);
+    if (broadcastId) keys.add(`broadcast:${broadcastId}`);
+
+    return keys;
+  };
+
+  const isIgnoredOrder = (order: any) => {
+    for (const key of getIgnoreKeys(order)) {
+      if (ignoredOrderIdsRef.current.has(key)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const markOrderIgnored = (order: any) => {
+    getIgnoreKeys(order).forEach((key) => ignoredOrderIdsRef.current.add(key));
+  };
   
   const fetchDashboard = async () => {
     if (!user?.id) return;
@@ -146,10 +180,29 @@ export default function Home() {
       const data = remoteMessage.data ?? {};
       const msgType = data.type || data.notificationType;
 
+      if (msgType === 'ORDER_BROADCAST_CLOSED') {
+        const sameBroadcast = incomingOrder?.broadcastId && data.broadcastId
+          ? incomingOrder.broadcastId === data.broadcastId
+          : false;
+        const sameOrderId = incomingOrder?.id && data.orderId
+          ? incomingOrder.id === data.orderId
+          : false;
+        const sameOrderNumber = incomingOrder?.orderNumber && data.orderNumber
+          ? incomingOrder.orderNumber === data.orderNumber
+          : false;
+
+        if (sameBroadcast || sameOrderId || sameOrderNumber) {
+          setIncomingOrder(null);
+          stopAlarm();
+        }
+        return;
+      }
+
       if ((msgType === 'NEW_DELIVERY_ORDER' || msgType === 'ORDER_ASSIGNED' || msgType === 'ASSIGNED') && active) {
         // A new order was broadcasted — show the accept/reject popup
         setIncomingOrder({
           id: data.orderId ?? '',
+          broadcastId: data.broadcastId ?? '',
           vendor: data.storeName ?? data.pickup ?? 'Store',
           location: data.delivery ?? 'Customer Location',
           distance: data.distanceKm ? `${data.distanceKm} km` : '—',
@@ -160,7 +213,7 @@ export default function Home() {
       }
     });
     return () => unsubscribe();
-  }, [active, user?.id]);
+  }, [active, incomingOrder, user?.id]);
 
   useEffect(() => {
     fetchDashboard();
@@ -199,8 +252,7 @@ export default function Home() {
              const findPotential = (arr: any[]) => {
                if (!Array.isArray(arr)) return null;
                return arr.find((o: any) => {
-                 const idStr = o.id?.toString() || o.orderId?.toString();
-                 if (ignoredOrderIdsRef.current.has(idStr)) return false;
+                 if (isIgnoredOrder(o)) return false;
                  
                  // Skip orders that are already being worked on (accepted, picked up, etc.)
                  const alreadyActiveStatuses = [
@@ -218,6 +270,26 @@ export default function Home() {
 
              const newPotential = findPotential(availableOrders) || findPotential(activeOrders) || findPotential(allOrders);
 
+             if (incomingOrder) {
+                const stillAvailable = availableOrders.some((o: any) => {
+                  const sameBroadcast = incomingOrder.broadcastId && o.broadcastId
+                    ? incomingOrder.broadcastId === o.broadcastId?.toString()
+                    : false;
+                  const sameOrderId = incomingOrder.id
+                    ? incomingOrder.id === (o.id?.toString() || o.orderId?.toString() || '')
+                    : false;
+                  const sameOrderNumber = incomingOrder.orderNumber && o.orderNumber
+                    ? incomingOrder.orderNumber === o.orderNumber?.toString()
+                    : false;
+                  return sameBroadcast || sameOrderId || sameOrderNumber;
+                });
+
+                if (!stillAvailable && availableOrders.length > 0) {
+                  setIncomingOrder(null);
+                  stopAlarm();
+                }
+             }
+
              if (newPotential && !incomingOrder) {
                 // Extract store/vendor info using same comprehensive fallbacks as orders.tsx
                 const storeObj = newPotential.store || newPotential.vendor || newPotential.merchant || {};
@@ -234,9 +306,21 @@ export default function Home() {
                 const rawOrderNumber = newPotential.orderNumber?.toString() || '';
                 const rawId = newPotential.id?.toString() || newPotential.orderId?.toString() || '';
                 const orderNumber = (rawOrderNumber && rawOrderNumber !== rawId) ? rawOrderNumber : rawId;
+                const broadcastId = newPotential.broadcastId?.toString() || '';
+                const riderToStoreDistanceKm = newPotential.riderToStoreDistanceKm;
+                const storeToCustomerDistanceKm = newPotential.storeToCustomerDistanceKm ?? newPotential.distanceKm;
+                const totalRouteDistanceKm = newPotential.totalRouteDistanceKm;
+                const distanceLabel = riderToStoreDistanceKm != null
+                  ? `${Number(riderToStoreDistanceKm).toFixed(1)} km to store`
+                  : totalRouteDistanceKm != null
+                    ? `${Number(totalRouteDistanceKm).toFixed(1)} km route`
+                    : storeToCustomerDistanceKm != null
+                      ? `${Number(storeToCustomerDistanceKm).toFixed(1)} km delivery`
+                      : (newPotential.distance ? newPotential.distance : "â€”");
 
                 setIncomingOrder({
                    id: rawId,
+                   broadcastId,
                    vendor: vendorName,
                    location: deliveryAddress,
                    distance: newPotential.distanceKm ? `${Number(newPotential.distanceKm).toFixed(1)} km` : (newPotential.distance ? newPotential.distance : "—"),
@@ -289,6 +373,7 @@ export default function Home() {
     await stopAlarm();
 
     const orderId = incomingOrder.id;           // numeric string e.g. "42"
+    const broadcastId = incomingOrder.broadcastId;
     const orderNumber = incomingOrder.orderNumber; // string e.g. "ORD-00042" or same as orderId if unavailable
     const hasRealOrderNumber = orderNumber && orderNumber !== orderId;
 
@@ -296,6 +381,13 @@ export default function Home() {
 
     // Build strategy list in priority order
     const strategies: Array<{ label: string; fn: () => Promise<any> }> = [];
+
+    if (broadcastId) {
+      strategies.push({
+        label: `Broadcast API (broadcastId=${broadcastId})`,
+        fn: () => orderService.acceptBroadcastFromApp(broadcastId),
+      });
+    }
 
     // PRIMARY: App API with numeric id — works for BROADCASTED_TO_RIDERS orders
     if (orderId) {
@@ -329,8 +421,7 @@ export default function Home() {
         await strategy.fn();
         console.log(`[ORDER] ✅ Success via ${strategy.label}`);
         // CRITICAL: Mark this order as handled so polling never picks it up again
-        if (orderId) ignoredOrderIdsRef.current.add(orderId);
-        if (orderNumber && orderNumber !== orderId) ignoredOrderIdsRef.current.add(orderNumber);
+        markOrderIgnored(incomingOrder);
         Alert.alert("Order Accepted!", "The order has been moved to your Active Tasks.");
         setIncomingOrder(null);
         await stopAlarm();
@@ -380,7 +471,7 @@ export default function Home() {
           });
       }
       // Track the ID in memory so we don't pick it up again on the next 15-second polling tick
-      ignoredOrderIdsRef.current.add(incomingOrder.id.toString());
+      markOrderIgnored(incomingOrder);
       
       setIncomingOrder(null);
       setShowRejectModal(false);
@@ -545,7 +636,7 @@ export default function Home() {
         <View style={styles.homeHeader}>
           <View style={styles.headerLeft}>
             <LinearGradient
-              colors={['#0E8A63', '#14A06D']}
+              colors={['#F97316', '#FB923C']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.groceryIconBox}
@@ -592,7 +683,7 @@ export default function Home() {
           contentContainerStyle={styles.scrollContent} 
           bounces={true}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0E8A63" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F97316" />
           }
         >
 
@@ -601,7 +692,7 @@ export default function Home() {
             <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.85)' }]}>
               <Animated.View entering={FadeInUp.springify()} style={styles.assignmentModal}>
                 <LinearGradient
-                  colors={['#0E8A63', '#0A6A4C']}
+                  colors={['#F97316', '#C2410C']}
                   style={styles.assignmentHeader}
                 >
                   <View style={styles.assignmentBadge}>
@@ -614,8 +705,8 @@ export default function Home() {
 
                 <View style={styles.assignmentBody}>
                    <View style={styles.stepItem}>
-                      <View style={[styles.stepIcon, { backgroundColor: '#F0FDF4' }]}>
-                         <MaterialCommunityIcons name="storefront" size={24} color="#0E8A63" />
+                      <View style={[styles.stepIcon, { backgroundColor: '#FFF7ED' }]}>
+                         <MaterialCommunityIcons name="storefront" size={24} color="#F97316" />
                       </View>
                       <View style={styles.stepText}>
                          <Text style={styles.stepLabel}>PICKUP AT</Text>
@@ -626,8 +717,8 @@ export default function Home() {
                    <View style={styles.stepDashed} />
 
                    <View style={styles.stepItem}>
-                      <View style={[styles.stepIcon, { backgroundColor: '#ECFDF5' }]}>
-                         <MaterialCommunityIcons name="map-marker-radius" size={24} color="#10B981" />
+                      <View style={[styles.stepIcon, { backgroundColor: '#FFF7ED' }]}>
+                         <MaterialCommunityIcons name="map-marker-radius" size={24} color="#FBBF24" />
                       </View>
                       <View style={styles.stepText}>
                          <Text style={styles.stepLabel}>DELIVER TO</Text>
@@ -660,7 +751,7 @@ export default function Home() {
                       style={styles.assignAcceptBtn}
                    >
                       <LinearGradient
-                        colors={['#10B981', '#059669']}
+                        colors={['#FBBF24', '#FB923C']}
                         style={StyleSheet.absoluteFillObject}
                       />
                       <Text style={styles.assignAcceptText}>ACCEPT & START</Text>
@@ -773,7 +864,7 @@ export default function Home() {
                 >
                   <View style={styles.earningsStatTop}>
                     <Text style={styles.earningsStatEmoji}>💸</Text>
-                    <Text style={[styles.earningsStatValue, { color: '#0E8A63' }]}>₹{Number(dashboard.totalEarnings || 0).toFixed(0)}</Text>
+                    <Text style={[styles.earningsStatValue, { color: '#F97316' }]}>₹{Number(dashboard.totalEarnings || 0).toFixed(0)}</Text>
                   </View>
                   <View style={styles.earningsStatBottom}>
                     <Text style={styles.earningsStatLabel}>Total Earnings</Text>
@@ -805,46 +896,10 @@ export default function Home() {
 
           {/* Quick Actions */}
           <View style={styles.quickGrid}>
-            <QuickAction icon="wallet-outline" label="Earnings" color="#0E8A63" bg="#F0FDF4" onPress={() => router.push("/(tabs)/earnings")} />
-            <QuickAction icon="clipboard-text-outline" label="Orders" color="#10B981" bg="#ECFDF5" onPress={() => router.push("/(tabs)/orders")} />
+            <QuickAction icon="wallet-outline" label="Earnings" color="#F97316" bg="#FFF7ED" onPress={() => router.push("/(tabs)/earnings")} />
+            <QuickAction icon="clipboard-text-outline" label="Orders" color="#FBBF24" bg="#FFF7ED" onPress={() => router.push("/(tabs)/orders")} />
             <QuickAction icon="headphones" label="Support" color="#EF4444" bg="#FEF2F2" onPress={() => setShowSupport(true)} />
           </View>
-
-          {/* Refer & Earn Banner */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => router.push("/refer")}
-            style={styles.referBanner}
-          >
-            <View style={styles.referBannerLeft}>
-              <View style={styles.referIllustration}>
-                <View style={styles.referPhoneFrame}>
-                  <Text style={styles.referPhoneEmoji}>🧑‍💼</Text>
-                  <View style={styles.referQRBox}>
-                    <MaterialCommunityIcons name="qrcode" size={20} color="#1E293B" />
-                  </View>
-                </View>
-                {/* Floating coins */}
-                <Text style={[styles.referCoin, { top: -4, right: -8 }]}>🪙</Text>
-                <Text style={[styles.referCoin, { top: 16, left: -12 }]}>🪙</Text>
-                <Text style={[styles.referCoin, { bottom: 8, right: -14 }]}>🪙</Text>
-                <Text style={[styles.referCoin, { bottom: -2, left: -6 }]}>🪙</Text>
-                <Text style={[styles.referCoin, { top: 40, right: 4 }]}>🪙</Text>
-              </View>
-            </View>
-            <View style={styles.referBannerRight}>
-              <Text style={styles.referBannerTitle}>
-                Refer and earn upto{' '}
-                <Text style={styles.referBannerAmount}>₹19000</Text>
-                {' '}in your city
-              </Text>
-              <View style={styles.referBannerBtn}>
-                <Text style={styles.referBannerBtnText}>Refer friends at Anusha Delivery Partner</Text>
-                <MaterialCommunityIcons name="chevron-right" size={18} color="#FFFFFF" />
-              </View>
-            </View>
-          </TouchableOpacity>
-
 
         </ScrollView>
       </SafeAreaView>
@@ -868,7 +923,7 @@ export default function Home() {
                 icon="phone-in-talk"
                 label="Call Support"
                 desc="Call: 6309981555"
-                color="#0A6A4C"
+                color="#C2410C"
                 onPress={() => Linking.openURL('tel:6309981555')}
               />
               <SupportTile
@@ -938,6 +993,9 @@ export default function Home() {
                   onChangeText={setCustomRejectReason}
                   multiline
                   maxLength={100}
+                  autoCorrect={false}
+                  autoComplete="off"
+                  spellCheck={false}
                 />
               </Animated.View>
             )}
@@ -990,7 +1048,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0F172A" },
   homeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#0F172A', borderBottomWidth: 0 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  groceryIconBox: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#0E8A63', justifyContent: 'center', alignItems: 'center' },
+  groceryIconBox: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
   brandName: { fontSize: 16, fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.3 },
   headerGreeting: { fontSize: 12, color: '#94A3B8', fontWeight: '600', marginTop: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1014,7 +1072,7 @@ const styles = StyleSheet.create({
   autoBannerIconCircle: { width: 64, height: 64, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   paginationDots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16, gap: 8 },
   carouselDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E2E8F0' },
-  carouselDotActive: { width: 24, height: 8, borderRadius: 4, backgroundColor: '#0E8A63' },
+  carouselDotActive: { width: 24, height: 8, borderRadius: 4, backgroundColor: '#F97316' },
 
   // ── Total Earnings Section ──
   earningsSection: { marginBottom: 24, marginTop: 8, borderRadius: 20, overflow: 'hidden', backgroundColor: '#1E293B', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
@@ -1034,7 +1092,7 @@ const styles = StyleSheet.create({
   earningsStatDivider: { width: 1, height: 40, backgroundColor: '#E2E8F0', marginHorizontal: 4 },
   totalEarningsBadge: { backgroundColor: '#1E293B', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6 },
   totalEarningsBadgeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-  totalEarningsValue: { fontSize: 16, fontWeight: '900', color: '#0E8A63' },
+  totalEarningsValue: { fontSize: 16, fontWeight: '900', color: '#F97316' },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, marginTop: 8 },
   sectionTitle: { color: '#0F172A', fontSize: 18, fontWeight: '900', letterSpacing: -0.5 },
@@ -1055,20 +1113,6 @@ const styles = StyleSheet.create({
   quickActionIconBox: { width: 52, height: 52, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   quickActionLabel: { color: '#0F172A', fontSize: 14, fontWeight: '800' },
 
-  // ── Refer & Earn Banner ──
-  referBanner: { flexDirection: 'row', backgroundColor: '#FFF8EC', borderRadius: 20, overflow: 'hidden', marginBottom: 30, elevation: 4, shadowColor: '#D97706', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8, borderWidth: 1.5, borderColor: '#FDECC8' },
-  referBannerLeft: { width: 120, justifyContent: 'center', alignItems: 'center', paddingVertical: 16, paddingLeft: 12 },
-  referIllustration: { width: 90, height: 100, justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  referPhoneFrame: { width: 64, height: 82, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#6366F1', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3 },
-  referPhoneEmoji: { fontSize: 28, marginBottom: 4 },
-  referQRBox: { backgroundColor: '#F1F5F9', borderRadius: 6, padding: 4 },
-  referCoin: { position: 'absolute', fontSize: 16 },
-  referBannerRight: { flex: 1, paddingVertical: 18, paddingRight: 16, paddingLeft: 8, justifyContent: 'center' },
-  referBannerTitle: { fontSize: 16, fontWeight: '700', color: '#1E293B', lineHeight: 23, marginBottom: 12 },
-  referBannerAmount: { fontSize: 20, fontWeight: '900', color: '#B45309' },
-  referBannerBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#A0522D', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, alignSelf: 'flex-start', gap: 4 },
-  referBannerBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
-
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.8)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 40, borderTopRightRadius: 40, padding: 28, paddingBottom: 48 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 },
@@ -1085,14 +1129,14 @@ const styles = StyleSheet.create({
   modalSecondaryBtnText: { color: '#475569', fontSize: 16, fontWeight: '800' },
   
   // Incoming Order Styles
-  incomingOrderCard: { width: '100%', marginBottom: 24, backgroundColor: '#FFFFFF', borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#14A06D', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 16, borderWidth: 1, borderColor: '#ECFDF5' },
-  incomingOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#14A06D', paddingHorizontal: 16, paddingVertical: 12 },
+  incomingOrderCard: { width: '100%', marginBottom: 24, backgroundColor: '#FFFFFF', borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#FB923C', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 16, borderWidth: 1, borderColor: '#FFF7ED' },
+  incomingOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FB923C', paddingHorizontal: 16, paddingVertical: 12 },
   incomingBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
   incomingBadgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
   incomingOrderId: { color: '#FFFFFF', fontSize: 13, fontWeight: '700', opacity: 0.9 },
   incomingOrderDetails: { padding: 20, paddingBottom: 10 },
   incomingRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  incomingIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center' },
+  incomingIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center' },
   incomingLabel: { fontSize: 12, color: '#64748B', fontWeight: '600', marginBottom: 2 },
   incomingValue: { fontSize: 15, color: '#0F172A', fontWeight: '800' },
   routeConnector: { marginLeft: 19, height: 28, borderLeftWidth: 2, borderLeftColor: '#E2E8F0', borderStyle: 'dashed', marginVertical: 2 },
@@ -1151,5 +1195,5 @@ const styles = StyleSheet.create({
   assignAcceptBtn: { flex: 2.2, height: 64, borderRadius: 20, overflow: 'hidden', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   assignAcceptText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
   countdownContainer: { height: 4, backgroundColor: '#F1F5F9', width: '100%' },
-  countdownBar: { height: '100%', backgroundColor: '#10B981', width: '70%' }
+  countdownBar: { height: '100%', backgroundColor: '#FBBF24', width: '70%' }
 });

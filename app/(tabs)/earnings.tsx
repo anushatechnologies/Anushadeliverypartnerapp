@@ -152,14 +152,14 @@ export default function Earnings() {
                     decimalPlaces: 0,
                     color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
                     labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                    fillShadowGradientFrom: "#10B981",
+                    fillShadowGradientFrom: "#FBBF24",
                     fillShadowGradientFromOpacity: 0.15,
                     fillShadowGradientTo: "#FFFFFF",
                     fillShadowGradientToOpacity: 0.0,
                     propsForDots: {
                       r: "4",
                       strokeWidth: "2",
-                      stroke: "#10B981",
+                      stroke: "#FBBF24",
                       fill: "#FFFFFF"
                     }
                   }}
@@ -236,7 +236,7 @@ export default function Earnings() {
           {fareRule && (
             <Animated.View entering={FadeInDown.delay(200)} style={styles.fareCard}>
               <View style={styles.fareCardHeader}>
-                <MaterialCommunityIcons name="currency-inr" size={18} color="#0E8A63" />
+                <MaterialCommunityIcons name="currency-inr" size={18} color="#F97316" />
                 <Text style={styles.fareCardTitle}>Your Fare Rate</Text>
                 <View style={styles.fareVehicleBadge}>
                   <Text style={styles.fareVehicleText}>{fareRule.vehicleType || ''}</Text>
@@ -286,7 +286,7 @@ export default function Earnings() {
 
               {payoutLoading ? (
                 <View style={styles.statusContent}>
-                   <ActivityIndicator size="large" color="#0A6A4C" />
+                   <ActivityIndicator size="large" color="#C2410C" />
                    <Text style={styles.statusMainText}>Processing Payout...</Text>
                    <Text style={styles.statusSubText}>Securely transferring ₹1,250.00 to your linked bank account.</Text>
                 </View>
@@ -317,7 +317,7 @@ function TouchableOpacity(props: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   safe: { flex: 1, backgroundColor: "#FFFFFF" },
-  payoutBtn: { backgroundColor: '#0A6A4C', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  payoutBtn: { backgroundColor: '#C2410C', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   payoutBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 68, paddingTop: 10, backgroundColor: '#FFFFFF' },
   
@@ -344,12 +344,12 @@ const styles = StyleSheet.create({
   
   mockupHistoryTile: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FAFAFD', padding: 20, borderRadius: 20, marginTop: 24 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  greenCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center' },
+  greenCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FBBF24', justifyContent: 'center', alignItems: 'center' },
   historyTileTitle: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
   
   mockupPayoutTile: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 20, borderRadius: 20, marginTop: 16, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
   payoutLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
-  greenBriefcase: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center', marginTop: 2 },
+  greenBriefcase: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#FBBF24', justifyContent: 'center', alignItems: 'center', marginTop: 2 },
   payoutTileTitle: { color: '#1E293B', fontSize: 15, fontWeight: '700', marginBottom: 2 },
   payoutTileSub: { color: '#64748B', fontSize: 12, fontWeight: '500', lineHeight: 16 },
   payoutTileAmount: { color: '#0F172A', fontSize: 24, fontWeight: '800' },
@@ -367,16 +367,16 @@ const styles = StyleSheet.create({
   statusMainText: { fontSize: 22, fontWeight: '900', color: '#0F172A', marginTop: 24, textAlign: 'center' },
   statusSubText: { fontSize: 15, color: '#64748B', textAlign: 'center', marginTop: 12, lineHeight: 22 },
   successIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#DCFCE7', justifyContent: 'center', alignItems: 'center' },
-  closeBtn: { backgroundColor: '#0A6A4C', width: '100%', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 32 },
+  closeBtn: { backgroundColor: '#C2410C', width: '100%', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 32 },
   closeBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
 
-  fareCard: { backgroundColor: '#F0FDF4', borderRadius: 20, padding: 18, marginTop: 16, borderWidth: 1, borderColor: '#D1FAE5' },
+  fareCard: { backgroundColor: '#FFF7ED', borderRadius: 20, padding: 18, marginTop: 16, borderWidth: 1, borderColor: '#FED7AA' },
   fareCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  fareCardTitle: { color: '#0E8A63', fontSize: 15, fontWeight: '800', flex: 1 },
-  fareVehicleBadge: { backgroundColor: '#0E8A63', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
+  fareCardTitle: { color: '#F97316', fontSize: 15, fontWeight: '800', flex: 1 },
+  fareVehicleBadge: { backgroundColor: '#F97316', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
   fareVehicleText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   fareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   fareLabel: { color: '#475569', fontSize: 14, fontWeight: '500' },
   fareValue: { color: '#0F172A', fontSize: 14, fontWeight: '700' },
-  fareDivider: { height: 1, backgroundColor: '#D1FAE5' },
+  fareDivider: { height: 1, backgroundColor: '#FED7AA' },
 });

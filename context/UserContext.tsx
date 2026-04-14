@@ -53,6 +53,20 @@ const STORAGE_KEYS = {
   PROFILE_STATE: "@anusha_bazaar_profile",
 };
 
+const normalizePhoneNumber = (phone?: string | null) => {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
+
+const normalizeUserProfile = (user: UserProfile | null | undefined): UserProfile | null => {
+  if (!user) return null;
+  return {
+    ...user,
+    phone: normalizePhoneNumber(user.phone),
+  };
+};
+
 export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -92,10 +106,11 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
         if (token && cachedProfileStr) {
           // ── FAST PATH: restore from cache immediately ──────────────────────
           const cachedProfile = JSON.parse(cachedProfileStr);
+          const normalizedCachedUser = normalizeUserProfile(cachedProfile.user);
           await new Promise(resolve => setTimeout(resolve, 3100));
 
           setAuthState({
-            user: cachedProfile.user,
+            user: normalizedCachedUser,
             verificationStatus: cachedProfile.verificationStatus,
             isLoggedIn: true,
             isLoading: false,
@@ -113,6 +128,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                       ...prev.user,
                       id: p.id,
                       name: `${p.firstName} ${p.lastName}`,
+                      phone: normalizePhoneNumber(p.phoneNumber || prev.user?.phone),
                       vehicleType: p.vehicleType,
                       vehicleModel: p.vehicleModel,
                       registrationNumber: p.registrationNumber,
@@ -140,10 +156,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             });
 
           // Sync FCM token silently
-          if (cachedProfile.user?.phone) {
+          if (normalizedCachedUser?.phone) {
             try {
               messaging().getToken()
-                .then(tk => { if (tk) authService.saveFcmToken(cachedProfile.user.phone, tk); })
+                .then(tk => { if (tk) authService.saveFcmToken(normalizedCachedUser.phone, tk); })
                 .catch(() => {});
             } catch {}
           }
@@ -162,7 +178,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                 user: {
                   id: p.id,
                   name: `${p.firstName} ${p.lastName}`,
-                  phone: p.phoneNumber,
+                  phone: normalizePhoneNumber(p.phoneNumber),
                   vehicleType: p.vehicleType,
                   vehicleModel: p.vehicleModel || "",
                   registrationNumber: p.registrationNumber || "",
@@ -182,7 +198,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
               if (p.phoneNumber) {
                 try {
                   messaging().getToken()
-                    .then(tk => { if (tk) authService.saveFcmToken(p.phoneNumber, tk); })
+                    .then(tk => { if (tk) authService.saveFcmToken(normalizePhoneNumber(p.phoneNumber), tk); })
                     .catch(() => {});
                 } catch {}
               }
@@ -234,10 +250,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       isLoggedIn: true,
       user: {
         name: "",
-        phone,
         vehicleType: "",
         photo: null,
-        ...(additionalData || {})
+        ...(additionalData || {}),
+        phone: normalizePhoneNumber(additionalData?.phone || phone),
       },
       ...(verificationStatus !== undefined ? { verificationStatus } : {})
     };
@@ -250,7 +266,9 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (authState.user) {
-      await persistProfile({ user: { ...authState.user, ...data } });
+      await persistProfile({
+        user: normalizeUserProfile({ ...authState.user, ...data } as UserProfile),
+      });
     } else {
       console.warn("🔍 [DEBUG] Cannot update profile - no user logged in");
     }

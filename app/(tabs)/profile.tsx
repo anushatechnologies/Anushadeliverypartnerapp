@@ -170,13 +170,13 @@ export default function Profile() {
                   <View style={styles.avatarRing}>
                     {isUploadingPhoto ? (
                       <View style={styles.avatarPlaceholder}>
-                         <ActivityIndicator size="small" color="#0E8A63" />
+                         <ActivityIndicator size="small" color="#F97316" />
                       </View>
                     ) : user?.photo ? (
                       <Image source={{ uri: user.photo }} style={styles.avatar} />
                     ) : (
                       <View style={styles.avatarPlaceholder}>
-                        <MaterialCommunityIcons name="account" size={40} color="#0E8A63" />
+                        <MaterialCommunityIcons name="account" size={40} color="#F97316" />
                       </View>
                     )}
                   </View>
@@ -213,7 +213,7 @@ export default function Profile() {
                 label="Total Trips"
                 value={profileStats.totalTrips.toString()}
                 icon="bike"
-                color="#0E8A63"
+                color="#F97316"
                 colors={['#1E293B', '#0F172A']}
              />
              <StatCardMini
@@ -330,7 +330,7 @@ export default function Profile() {
                     <Text style={[styles.langCellText, language === 'en' && styles.langCellTextActive]}>English</Text>
                     <Text style={styles.langCellSub}>System Default</Text>
                  </View>
-                 {language === 'en' && <MaterialCommunityIcons name="check-circle" size={24} color="#0E8A63" />}
+                 {language === 'en' && <MaterialCommunityIcons name="check-circle" size={24} color="#F97316" />}
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => changeLang('te')} style={[styles.langCell, language === 'te' && styles.langCellActive]}>
@@ -338,7 +338,7 @@ export default function Profile() {
                     <Text style={[styles.langCellText, language === 'te' && styles.langCellTextActive]}>తెలుగు (Telugu)</Text>
                     <Text style={styles.langCellSub}>Regional Language</Text>
                  </View>
-                 {language === 'te' && <MaterialCommunityIcons name="check-circle" size={24} color="#0E8A63" />}
+                 {language === 'te' && <MaterialCommunityIcons name="check-circle" size={24} color="#F97316" />}
               </TouchableOpacity>
            </Animated.View>
         </View>
@@ -391,7 +391,7 @@ export default function Profile() {
                    icon="phone-in-talk" 
                    label="Call Support" 
                    desc={`Call: ${supportNumber}`} 
-                   color="#0A6A4C" 
+                   color="#C2410C" 
                    onPress={() => Linking.openURL(`tel:${supportNumber}`)} 
                  />
                  <SupportTile 
@@ -578,11 +578,11 @@ function EditPersonalModal({ visible, onClose, initialName, phone, onSuccess }: 
                  <View style={{ flexDirection: "row", gap: 12, marginBottom: 16 }}>
                     <View style={{ flex: 1 }}>
                        <Text style={styles.inputLabelMicro}>FIRST NAME</Text>
-                       <TextInput style={styles.modalInput} value={firstName} onChangeText={setFirstName} />
+                       <TextInput style={styles.modalInput} value={firstName} onChangeText={setFirstName} autoCorrect={false} autoComplete="off" spellCheck={false} />
                     </View>
                     <View style={{ flex: 1 }}>
                        <Text style={styles.inputLabelMicro}>LAST NAME</Text>
-                       <TextInput style={styles.modalInput} value={lastName} onChangeText={setLastName} />
+                       <TextInput style={styles.modalInput} value={lastName} onChangeText={setLastName} autoCorrect={false} autoComplete="off" spellCheck={false} />
                     </View>
                  </View>
 
@@ -660,22 +660,28 @@ function EditVehicleModal({ visible, onClose, initialType, initialModel, initial
                  </View>
 
                  <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>VEHICLE MODEL</Text>
-                 <TextInput 
-                   style={styles.modalInput} 
-                   placeholder="e.g. Honda Activa 6G" 
-                   placeholderTextColor="#94A3B8" 
-                   value={model} 
-                   onChangeText={setModel} 
+                 <TextInput
+                   style={styles.modalInput}
+                   placeholder="e.g. Honda Activa 6G"
+                   placeholderTextColor="#94A3B8"
+                   value={model}
+                   onChangeText={setModel}
+                   autoCorrect={false}
+                   autoComplete="off"
+                   spellCheck={false}
                  />
 
                  <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>REGISTRATION NUMBER</Text>
-                 <TextInput 
-                   style={styles.modalInput} 
-                   placeholder="e.g. AP 39 XY 1234" 
-                   placeholderTextColor="#94A3B8" 
-                   value={regNo} 
-                   onChangeText={setRegNo} 
+                 <TextInput
+                   style={styles.modalInput}
+                   placeholder="e.g. AP 39 XY 1234"
+                   placeholderTextColor="#94A3B8"
+                   value={regNo}
+                   onChangeText={setRegNo}
                    autoCapitalize="characters"
+                   autoCorrect={false}
+                   autoComplete="off"
+                   spellCheck={false}
                  />
 
                  <TouchableOpacity onPress={handleSave} disabled={loading} style={[styles.modalActionBtnPrimary, loading && { opacity: 0.7 }]}>
@@ -803,12 +809,15 @@ function BankDetailsModal({ visible, onClose, initialAccountName, initialAccount
               value={accountName}
               onChangeText={setAccountName}
               autoCapitalize="words"
+              autoCorrect={false}
+              autoComplete="off"
+              spellCheck={false}
             />
 
             <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>BANK NAME</Text>
             <View>
               <View style={styles.modalSearchField}>
-                <MaterialCommunityIcons name="magnify" size={20} color="#0E8A63" />
+                <MaterialCommunityIcons name="magnify" size={20} color="#F97316" />
                 <TextInput
                   style={styles.modalSearchInput}
                   placeholder="Search your bank (e.g. State Bank)"
@@ -818,9 +827,11 @@ function BankDetailsModal({ visible, onClose, initialAccountName, initialAccount
                   onFocus={loadPopularBanks}
                   autoCapitalize="words"
                   autoCorrect={false}
+                  autoComplete="off"
+                  spellCheck={false}
                 />
                 {bankSearching ? (
-                  <ActivityIndicator size="small" color="#0E8A63" />
+                  <ActivityIndicator size="small" color="#F97316" />
                 ) : bankSelected ? (
                   <MaterialCommunityIcons name="check-circle" size={18} color="#16A34A" />
                 ) : null}
@@ -839,7 +850,7 @@ function BankDetailsModal({ visible, onClose, initialAccountName, initialAccount
                     scrollEnabled={false}
                     renderItem={({ item }) => (
                       <TouchableOpacity style={styles.modalBankDropdownItem} onPress={() => selectBank(item)}>
-                        <MaterialCommunityIcons name="bank" size={18} color="#0E8A63" />
+                        <MaterialCommunityIcons name="bank" size={18} color="#F97316" />
                         <View style={{ flex: 1, marginLeft: 10 }}>
                           <Text style={styles.modalBankDropdownName}>{item.name}</Text>
                           <Text style={styles.modalBankDropdownCode}>{item.ifscPrefix} · {item.shortCode}</Text>
@@ -861,7 +872,9 @@ function BankDetailsModal({ visible, onClose, initialAccountName, initialAccount
               value={accountNumber}
               onChangeText={setAccountNumber}
               keyboardType="number-pad"
-              secureTextEntry={false}
+              autoCorrect={false}
+              autoComplete="off"
+              spellCheck={false}
             />
 
             <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>CONFIRM ACCOUNT NUMBER</Text>
@@ -872,6 +885,9 @@ function BankDetailsModal({ visible, onClose, initialAccountName, initialAccount
               value={confirmAccountNumber}
               onChangeText={setConfirmAccountNumber}
               keyboardType="number-pad"
+              autoCorrect={false}
+              autoComplete="off"
+              spellCheck={false}
             />
 
             <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>IFSC CODE</Text>
@@ -882,6 +898,9 @@ function BankDetailsModal({ visible, onClose, initialAccountName, initialAccount
               value={ifscCode}
               onChangeText={(v) => setIfscCode(v.toUpperCase())}
               autoCapitalize="characters"
+              autoCorrect={false}
+              autoComplete="off"
+              spellCheck={false}
               maxLength={11}
             />
 
@@ -944,7 +963,7 @@ const styles = StyleSheet.create({
   statCellValue: { fontSize: 18, fontWeight: '900', color: '#FFFFFF' },
   statCellLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
 
-  lockedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#86EFAC', borderRadius: 12, padding: 12, marginBottom: 12 },
+  lockedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#86EFAC', borderRadius: 12, padding: 12, marginBottom: 12 },
   lockedBannerText: { flex: 1, color: '#166534', fontSize: 12, fontWeight: '600', lineHeight: 18 },
 
   sectionHeadingRow: { marginBottom: 12, marginLeft: 4 },
@@ -976,10 +995,10 @@ const styles = StyleSheet.create({
   closeModalBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   
   langCell: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderRadius: 24, marginBottom: 12, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#F1F5F9' },
-  langCellActive: { backgroundColor: '#F0FDF4', borderColor: '#0E8A63' },
+  langCellActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
   langCellLeft: { gap: 2 },
   langCellText: { fontSize: 17, fontWeight: '800', color: '#1E293B' },
-  langCellTextActive: { color: '#0E8A63' },
+  langCellTextActive: { color: '#F97316' },
   langCellSub: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
 
   supportGridList: { gap: 16, marginBottom: 28 },
@@ -993,12 +1012,12 @@ const styles = StyleSheet.create({
 
   modalOverlayCenteredAlpha: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 28 },
   lockedSupportBox: { backgroundColor: '#FFFFFF', borderRadius: 32, padding: 28, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 12 },
-  lockedSupportIcon: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center', marginBottom: 18, alignSelf: 'center' },
+  lockedSupportIcon: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center', marginBottom: 18, alignSelf: 'center' },
   lockedSupportTitle: { color: '#0F172A', fontSize: 24, fontWeight: '900', textAlign: 'center' },
   lockedSupportSubtitle: { color: '#64748B', fontSize: 14, fontWeight: '600', lineHeight: 22, textAlign: 'center', marginTop: 10, marginBottom: 22 },
-  lockedSupportPrimary: { height: 58, borderRadius: 18, backgroundColor: '#0E8A63', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
+  lockedSupportPrimary: { height: 58, borderRadius: 18, backgroundColor: '#F97316', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
   lockedSupportPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
-  lockedSupportSecondary: { height: 58, borderRadius: 18, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
+  lockedSupportSecondary: { height: 58, borderRadius: 18, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
   lockedSupportSecondaryText: { color: '#166534', fontSize: 16, fontWeight: '900' },
   lockedSupportClose: { height: 54, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   lockedSupportCloseText: { color: '#475569', fontSize: 15, fontWeight: '800' },
@@ -1017,7 +1036,7 @@ const styles = StyleSheet.create({
   infoDataItem: { marginBottom: 20 },
   infoDataLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
   infoDataValue: { color: '#1E293B', fontSize: 18, fontWeight: '700', marginTop: 4 },
-  modalActionBtnPrimary: { backgroundColor: '#0E8A63', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 12, shadowColor: '#0E8A63', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
+  modalActionBtnPrimary: { backgroundColor: '#F97316', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 12, shadowColor: '#F97316', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
   modalActionBtnTextPrimary: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
 
   inputLabelMicro: { fontSize: 11, fontWeight: '800', color: '#64748B', letterSpacing: 1, marginBottom: 8 },
@@ -1078,7 +1097,7 @@ const styles = StyleSheet.create({
   },
   vehicleChipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   vChip: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
-  vChipActive: { backgroundColor: '#F0FDF4', borderColor: '#0E8A63' },
+  vChipActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
   vChipText: { color: '#64748B', fontSize: 14, fontWeight: '700' },
-  vChipTextActive: { color: '#0E8A63' },
+  vChipTextActive: { color: '#F97316' },
 });

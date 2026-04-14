@@ -386,7 +386,7 @@ export default function OtpScreen() {
               disabled={code.length !== 6 || loading}
             >
               <LinearGradient
-                colors={code.length === 6 ? ['#0E8A63', '#14A06D'] : ['#C4D4CC', '#C4D4CC']}
+                colors={code.length === 6 ? ['#F97316', '#FB923C'] : ['#C4D4CC', '#C4D4CC']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.verifyBtnInner}
@@ -651,7 +651,7 @@ const styles = StyleSheet.create({
   verifyBtn: {
     borderRadius: 18,
     overflow: 'hidden',
-    shadowColor: '#0E8A63',
+    shadowColor: '#F97316',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 12,

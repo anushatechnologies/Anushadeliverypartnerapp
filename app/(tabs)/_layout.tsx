@@ -16,7 +16,7 @@ export default function TabsLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: "#0E8A63",
+          tabBarActiveTintColor: "#F97316",
           tabBarInactiveTintColor: "#94A3B8",
           tabBarStyle: {
             height: 75,
@@ -126,10 +126,10 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 22,
-    backgroundColor: '#0E8A63',
+    backgroundColor: '#F97316',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: "#0E8A63",
+    shadowColor: "#F97316",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -139,9 +139,9 @@ const styles = StyleSheet.create({
     width: 6,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#0E8A63',
+    backgroundColor: '#F97316',
     marginTop: 4,
-    shadowColor: '#0E8A63',
+    shadowColor: '#F97316',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 4,

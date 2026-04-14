@@ -44,6 +44,10 @@ export function PartnerInput({
           </View>
         ) : null}
         <TextInput
+          autoCorrect={false}
+          autoComplete="off"
+          spellCheck={false}
+          textContentType="none"
           {...props}
           style={[styles.input, style]}
           placeholderTextColor={partnerTheme.colors.textSoft}

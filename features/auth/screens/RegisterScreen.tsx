@@ -811,7 +811,7 @@ export default function RegisterScreen() {
         <View style={styles.sectionStack}>
           {/* Bank info notice */}
           <View style={styles.bankNoticeCard}>
-            <MaterialCommunityIcons name="bank-outline" size={22} color="#0E8A63" />
+            <MaterialCommunityIcons name="bank-outline" size={22} color="#F97316" />
             <View style={{ flex: 1 }}>
               <Text style={styles.bankNoticeTitle}>Salary & earnings payout</Text>
               <Text style={styles.bankNoticeText}>Your delivery earnings will be transferred to this account. Double-check the details before submitting.</Text>
@@ -830,7 +830,7 @@ export default function RegisterScreen() {
               returnKeyType="search"
               rightSlot={
                 bankSearching
-                  ? <ActivityIndicator size="small" color="#0E8A63" />
+                  ? <ActivityIndicator size="small" color="#F97316" />
                   : bankSelected
                     ? <MaterialCommunityIcons name="check-circle" size={20} color="#16A34A" />
                     : undefined
@@ -852,7 +852,7 @@ export default function RegisterScreen() {
                       style={styles.bankDropdownItem}
                       onPress={() => selectBank(item)}
                     >
-                      <MaterialCommunityIcons name="bank" size={18} color="#0E8A63" />
+                      <MaterialCommunityIcons name="bank" size={18} color="#F97316" />
                       <View style={{ flex: 1, marginLeft: 10 }}>
                         <Text style={styles.bankDropdownName}>{item.name}</Text>
                         <Text style={styles.bankDropdownCode}>{item.ifscPrefix} · {item.shortCode}</Text>
