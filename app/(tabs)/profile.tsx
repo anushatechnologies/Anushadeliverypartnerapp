@@ -16,7 +16,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
-  FlatList,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,17 +23,143 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useUser } from "../../context/UserContext";
 import { useLanguage, Language } from "../../context/LanguageContext";
+import { useTheme } from "../../context/ThemeContext";
 import Animated, { FadeInDown, FadeInUp, FadeInLeft } from "react-native-reanimated";
 import { StatusBar } from "expo-status-bar";
-import PremiumHeader from "../../components/PremiumHeader";
 import { LinearGradient } from "expo-linear-gradient";
 import CustomTouchableOpacity from "../../components/CustomTouchableOpacity";
-import PremiumPopup, { PopupType } from "../../components/PremiumPopup";
 import { orderService } from "../../services/orderService";
 import { profileService } from "../../services/profileService";
 import { bankService, type BankOption } from "../../services/bankService";
 
 const { width } = Dimensions.get("window");
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function StatCardMini({ label, value, icon, color, theme }: any) {
+  return (
+    <View style={[miniStyles.card, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}>
+      <View style={[miniStyles.iconCircle, { backgroundColor: color + "20" }]}>
+        <MaterialCommunityIcons name={icon} size={22} color={color} />
+      </View>
+      <Text style={[miniStyles.value, { color: theme.text }]}>{value}</Text>
+      <Text style={[miniStyles.label, { color: theme.textMuted }]}>{label}</Text>
+    </View>
+  );
+}
+
+const miniStyles = StyleSheet.create({
+  card: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 4,
+    alignItems: "center",
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  value: { fontSize: 20, fontWeight: "800", letterSpacing: -0.5 },
+  label: { fontSize: 11, fontWeight: "600", marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 },
+});
+
+function MenuAction({
+  icon,
+  label,
+  value,
+  locked,
+  status,
+  onPress,
+  isSwitch,
+  switchValue,
+  onSwitchChange,
+  theme,
+  danger,
+}: any) {
+  const statusColor =
+    status === "approved"
+      ? "#16A34A"
+      : status === "rejected"
+      ? "#DC2626"
+      : "#F97316";
+
+  return (
+    <TouchableOpacity
+      onPress={!isSwitch ? onPress : undefined}
+      activeOpacity={0.75}
+      style={[menuStyles.row, { borderColor: theme.divider }]}
+    >
+      <View style={[menuStyles.iconBg, { backgroundColor: (danger ? theme.dangerSoft : theme.primaryGlow) }]}>
+        <MaterialCommunityIcons
+          name={icon}
+          size={20}
+          color={danger ? theme.danger : theme.primary}
+        />
+      </View>
+      <Text style={[menuStyles.label, { color: danger ? theme.danger : theme.text, flex: 1 }]} numberOfLines={1}>{label}</Text>
+      {locked && (
+        <MaterialCommunityIcons name="lock" size={14} color={theme.textSoft} style={{ marginRight: 4 }} />
+      )}
+      {status && (
+        <View style={[menuStyles.statusBadge, { backgroundColor: statusColor + "18" }]}>
+          <Text style={[menuStyles.statusText, { color: statusColor }]}>{status.toUpperCase()}</Text>
+        </View>
+      )}
+      {value && !status && (
+        <Text style={[menuStyles.value, { color: theme.textMuted }]} numberOfLines={1}>{value}</Text>
+      )}
+      {isSwitch ? (
+        <Switch
+          value={switchValue}
+          onValueChange={onSwitchChange}
+          trackColor={{ false: theme.switchTrack, true: theme.primary }}
+          thumbColor={switchValue ? "#FFFFFF" : theme.switchThumb}
+        />
+      ) : (
+        <MaterialCommunityIcons name="chevron-right" size={22} color={theme.textSoft} />
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const menuStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  iconBg: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  label: { fontSize: 15, fontWeight: "600" },
+  value: { fontSize: 13, fontWeight: "500", maxWidth: 120 },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginRight: 4,
+  },
+  statusText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+});
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Profile() {
   const supportNumber = "6309981555";
@@ -42,6 +167,8 @@ export default function Profile() {
   const router = useRouter();
   const { authState, logout, updateProfile } = useUser();
   const { language, setLanguage, t } = useLanguage();
+  const { theme, isDark, toggleTheme } = useTheme();
+
   const [personalModal, setPersonalModal] = useState(false);
   const [vehicleModal, setVehicleModal] = useState(false);
   const [bankModal, setBankModal] = useState(false);
@@ -51,1053 +178,900 @@ export default function Profile() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [profileStats, setProfileStats] = useState({ totalTrips: 0, rating: "--" });
-  const [popup, setPopup] = useState<{visible: boolean, type: PopupType, title: string, message: string}>({
-    visible: false, type: "success", title: "", message: ""
-  });
 
-  const showSuccessPopup = (msg: string) => {
-    setPopup({ visible: true, type: "success", title: "Updated!", message: msg });
-    setTimeout(() => setPopup(prev => ({ ...prev, visible: false })), 2500);
-  };
+  // Bank modal state
+  const [bankName, setBankName] = useState("");
+  const [bankAccountName, setBankAccountName] = useState("");
+  const [bankAccountNumber, setBankAccountNumber] = useState("");
+  const [bankConfirmNumber, setBankConfirmNumber] = useState("");
+  const [bankIfscCode, setBankIfscCode] = useState("");
+  const [bankSearchQuery, setBankSearchQuery] = useState("");
+  const [bankOptions, setBankOptions] = useState<BankOption[]>([]);
+  const [bankSearching, setBankSearching] = useState(false);
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+  const [bankSelected, setBankSelected] = useState(false);
+  const [bankSaving, setBankSaving] = useState(false);
+  const bankSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Personal edit state
+  const [editName, setEditName] = useState("");
+  const [personalSaving, setPersonalSaving] = useState(false);
+
+  // Vehicle modal state
+  const [editVehicleModel, setEditVehicleModel] = useState("");
+  const [editVehicleReg, setEditVehicleReg] = useState("");
+  const [vehicleSaving, setVehicleSaving] = useState(false);
 
   const user = authState.user;
-  const isApproved = authState.verificationStatus === 'approved';
+  const isApproved = authState.verificationStatus === "approved";
 
-  const openLockedSupport = () => {
-    setShowLockedSupport(true);
-  };
-
-  const handleUpdateAvatar = async () => {
-     if (isApproved) {
-        openLockedSupport();
-        return;
-     }
-     Alert.alert(
-       "Update Profile Photo",
-       "Choose an option to update your live photo",
-       [
-         { 
-           text: "Camera", 
-           onPress: async () => {
-             const { status } = await ImagePicker.requestCameraPermissionsAsync();
-             if (status !== 'granted') return Alert.alert("Required", "Camera access is needed.");
-             const result = await ImagePicker.launchCameraAsync({ quality: 0.3 });
-             if (!result.canceled && result.assets) uploadPhoto(result.assets[0].uri);
-           }
-         },
-         { 
-           text: "Device Files", 
-           onPress: async () => {
-             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-             if (status !== 'granted') return Alert.alert("Required", "Gallery access is needed.");
-             const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.3 });
-             if (!result.canceled && result.assets) uploadPhoto(result.assets[0].uri);
-           }
-         },
-         { text: "Cancel", style: "cancel" }
-       ]
-     );
-  };
-
-  const uploadPhoto = async (uri: string) => {
-     setIsUploadingPhoto(true);
-     try {
-        if (!user || (!user.id && user.id !== 0)) throw new Error("Missing Account Context");
-
-        const response = await profileService.updateProfilePhoto(uri);
-        const nextPhotoUrl =
-          response?.photoUrl ||
-          response?.profilePhotoUrl ||
-          response?.deliveryPerson?.profilePhotoUrl;
-
-        if (nextPhotoUrl) {
-          await updateProfile({ photo: nextPhotoUrl });
-        }
-
-        Alert.alert("Success", "Profile photo synced for Admin approval!");
-     } catch (err: any) {
-        console.warn("Avatar PUT Failed:", err?.response?.data || err?.message);
-        Alert.alert("Upload Failed", err?.response?.data?.message || err.message || "Could not submit your live photo right now.");
-     } finally {
-        setIsUploadingPhoto(false);
-     }
-  };
-
-  React.useEffect(() => {
+  useEffect(() => {
     if (user?.id) {
-       orderService.getStatistics(user.id)
-         .then(res => setProfileStats({ totalTrips: res.completedOrders || 0, rating: res.rating || "--" }))
-         .catch(e => console.warn("Failed fetching profile stats", e));
+      orderService
+        .getStatistics(user.id)
+        .then((res) =>
+          setProfileStats({
+            totalTrips: res.completedOrders || 0,
+            rating: res.rating || "--",
+          })
+        )
+        .catch(() => {});
     }
   }, [user?.id]);
 
-  const handleLogout = () => {
-    setShowLogoutModal(true);
+  const handleUpdateAvatar = async () => {
+    if (isApproved) {
+      setShowLockedSupport(true);
+      return;
+    }
+    Alert.alert("Update Profile Photo", "Choose an option", [
+      {
+        text: "Camera",
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== "granted")
+            return Alert.alert("Required", "Camera access is needed.");
+          const result = await ImagePicker.launchCameraAsync({ quality: 0.3 });
+          if (!result.canceled && result.assets) uploadPhoto(result.assets[0].uri);
+        },
+      },
+      {
+        text: "Device Files",
+        onPress: async () => {
+          const { status } =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== "granted")
+            return Alert.alert("Required", "Gallery access is needed.");
+          const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.3 });
+          if (!result.canceled && result.assets) uploadPhoto(result.assets[0].uri);
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
+  const uploadPhoto = async (uri: string) => {
+    setIsUploadingPhoto(true);
+    try {
+      const response = await profileService.updateProfilePhoto(uri);
+      const nextPhotoUrl =
+        response?.photoUrl ||
+        response?.profilePhotoUrl ||
+        response?.deliveryPerson?.profilePhotoUrl;
+      if (nextPhotoUrl) await updateProfile({ photo: nextPhotoUrl });
+      Alert.alert("Success", "Profile photo submitted for Admin approval!");
+    } catch (err: any) {
+      Alert.alert(
+        "Upload Failed",
+        err?.response?.data?.message || err.message || "Could not upload photo right now."
+      );
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleLogout = () => setShowLogoutModal(true);
   const confirmLogout = async () => {
     setShowLogoutModal(false);
     await logout();
   };
-
   const changeLang = (lang: Language) => {
     setLanguage(lang);
     setLangModal(false);
   };
 
-  return (
-    <>
-    <PremiumPopup {...popup} />
-    <View style={styles.container}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <PremiumHeader 
-           title={t('account')}
-        />
-
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          
-          {/* Profile Premium Header */}
-          <Animated.View entering={FadeInDown.duration(600)} style={styles.profileHeaderOuter}>
-            <LinearGradient
-              colors={['#111827', '#1F2937']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.profileHeaderGradient}
-            >
-              <View style={styles.profileHeaderInner}>
-                <TouchableOpacity onPress={handleUpdateAvatar} style={styles.avatarContainer}>
-                  <View style={styles.avatarRing}>
-                    {isUploadingPhoto ? (
-                      <View style={styles.avatarPlaceholder}>
-                         <ActivityIndicator size="small" color="#F97316" />
-                      </View>
-                    ) : user?.photo ? (
-                      <Image source={{ uri: user.photo }} style={styles.avatar} />
-                    ) : (
-                      <View style={styles.avatarPlaceholder}>
-                        <MaterialCommunityIcons name="account" size={40} color="#F97316" />
-                      </View>
-                    )}
-                  </View>
-                  {!isUploadingPhoto && <View style={styles.statusDotPulsing} />}
-                </TouchableOpacity>
-                
-                <View style={styles.profileInfo}>
-                  <Text style={styles.nameText}>{user?.name || "Rider Partner"}</Text>
-                  <Text style={styles.phoneText}>
-                    {(() => {
-                      // Always keep the last 10 digits — handles "+919948598350", "919948598350", "9948598350"
-                      const digits = (user?.phone || '').replace(/\D/g, '');
-                      const normalized = digits.length > 10 ? digits.slice(-10) : (digits || '0000000000');
-                      return `+91 ${normalized}`;
-                    })()}
-                  </Text>
-                  <View style={styles.idBadgeMini}>
-                    <Text style={styles.idTextMini}>
-                      {(() => {
-                        const digits = (user?.phone || '').replace(/\D/g, '');
-                        const normalized = digits.length > 10 ? digits.slice(-10) : (digits || '0000000000');
-                        return `ID: AB-${normalized.slice(-4)}`;
-                      })()}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-
-          {/* Quick Info Grid - Home Style */}
-          <View style={styles.infoGridRow}>
-             <StatCardMini
-                label="Total Trips"
-                value={profileStats.totalTrips.toString()}
-                icon="bike"
-                color="#F97316"
-                colors={['#1E293B', '#0F172A']}
-             />
-             <StatCardMini
-                label="Rating"
-                value={profileStats.rating}
-                icon="star"
-                color="#FF9F0A"
-                colors={['#1E293B', '#0F172A']}
-             />
-          </View>
-
-          {/* Menu Sections */}
-          <View style={styles.sectionHeadingRow}>
-            <Text style={styles.sectionHeaderTitle}>Account Configuration</Text>
-          </View>
-
-          {isApproved && (
-            <TouchableOpacity style={styles.lockedBanner} activeOpacity={0.9} onPress={openLockedSupport}>
-              <MaterialCommunityIcons name="lock-check-outline" size={16} color="#C2410C" />
-              <Text style={styles.lockedBannerText}>Account approved — personal, vehicle and bank details are locked. Contact support to modify.</Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color="#C2410C" />
-            </TouchableOpacity>
-          )}
-
-          <View style={styles.menuGroupCard}>
-             <MenuAction
-               icon="account-details-outline"
-               label="Personal Details"
-               locked={isApproved}
-               onPress={() => isApproved
-                 ? openLockedSupport()
-                 : setPersonalModal(true)
-               }
-             />
-             <View style={styles.menuDividerLine} />
-             <MenuAction
-               icon="car-info"
-               label="Vehicle Information"
-               locked={isApproved}
-               onPress={() => isApproved
-                 ? openLockedSupport()
-                 : setVehicleModal(true)
-               }
-               value={user?.vehicleModel ? `${user.vehicleType} (${user.vehicleModel})` : user?.vehicleType}
-             />
-             <View style={styles.menuDividerLine} />
-             <MenuAction
-               icon="bank-outline"
-               label="Bank Details"
-               locked={isApproved}
-               onPress={() => isApproved
-                 ? openLockedSupport()
-                 : setBankModal(true)
-               }
-               value={user?.bankName || undefined}
-             />
-             <View style={styles.menuDividerLine} />
-             <MenuAction icon="shield-check-outline" label="KYC Verification" onPress={() => router.push("/kyc")} status={authState.verificationStatus || 'Pending'} />
-          </View>
-
-          <View style={styles.sectionHeadingRow}>
-            <Text style={styles.sectionHeaderTitle}>Preferences</Text>
-          </View>
-
-          <View style={styles.menuGroupCard}>
-             <MenuAction 
-               icon="translate" 
-               label={t('language')} 
-               value={language === "en" ? "English" : "Telugu"} 
-               onPress={() => setLangModal(true)} 
-             />
-          </View>
-
-          <View style={styles.sectionHeadingRow}>
-            <Text style={styles.sectionHeaderTitle}>Support & Legal</Text>
-          </View>
-
-          <View style={styles.menuGroupCard}>
-             <MenuAction icon="help-circle-outline" label={t('help')} onPress={() => setShowHelp(true)} />
-             <View style={styles.menuDividerLine} />
-             <MenuAction icon="file-document-outline" label="Terms & Conditions" onPress={() => router.push('/terms')} />
-             <View style={styles.menuDividerLine} />
-             <MenuAction icon="information-outline" label="About Anusha Bazaar" onPress={() => router.push('/about')} />
-          </View>
-
-          {/* Logout Section */}
-          <CustomTouchableOpacity onPress={handleLogout} style={styles.logoutButtonOuter}>
-             <MaterialCommunityIcons name="logout-variant" size={22} color="#EF4444" />
-             <Text style={styles.logoutButtonText}>{t('logout')}</Text>
-          </CustomTouchableOpacity>
-
-          {/* Version Info */}
-          <View style={styles.footerVersion}>
-             <Text style={styles.versionLabel}>Version 2.4.0 (Build 56)</Text>
-             <Text style={styles.copyrightLabel}>© 2026 Anusha Bazaar Logistics</Text>
-          </View>
-
-        </ScrollView>
-      </SafeAreaView>
-
-      {/* Language Modal */}
-      <Modal visible={langModal} transparent animationType="slide">
-        <View style={[styles.modalOverlayBlur, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
-           <Animated.View entering={FadeInUp} style={styles.modalSheet}>
-              <View style={styles.modalSheetHeader}>
-                 <Text style={styles.modalSheetTitle}>Select Language</Text>
-                 <TouchableOpacity onPress={() => setLangModal(false)} style={styles.closeModalBtn}>
-                    <MaterialCommunityIcons name="close" size={24} color="#0F172A" />
-                 </TouchableOpacity>
-              </View>
-              
-              <TouchableOpacity onPress={() => changeLang('en')} style={[styles.langCell, language === 'en' && styles.langCellActive]}>
-                 <View style={styles.langCellLeft}>
-                    <Text style={[styles.langCellText, language === 'en' && styles.langCellTextActive]}>English</Text>
-                    <Text style={styles.langCellSub}>System Default</Text>
-                 </View>
-                 {language === 'en' && <MaterialCommunityIcons name="check-circle" size={24} color="#F97316" />}
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => changeLang('te')} style={[styles.langCell, language === 'te' && styles.langCellActive]}>
-                 <View style={styles.langCellLeft}>
-                    <Text style={[styles.langCellText, language === 'te' && styles.langCellTextActive]}>తెలుగు (Telugu)</Text>
-                    <Text style={styles.langCellSub}>Regional Language</Text>
-                 </View>
-                 {language === 'te' && <MaterialCommunityIcons name="check-circle" size={24} color="#F97316" />}
-              </TouchableOpacity>
-           </Animated.View>
-        </View>
-      </Modal>
-
-      {/* Info Modals */}
-      <EditPersonalModal 
-        visible={personalModal} 
-        onClose={() => setPersonalModal(false)} 
-        initialName={user?.name || ""}
-        phone={user?.phone || "N/A"}
-        onSuccess={showSuccessPopup}
-      />
-
-      <EditVehicleModal
-        visible={vehicleModal}
-        onClose={() => setVehicleModal(false)}
-        initialType={user?.vehicleType || "Bike"}
-        initialModel={user?.vehicleModel || ""}
-        initialRegNo={user?.registrationNumber || ""}
-        onSuccess={showSuccessPopup}
-      />
-
-      <BankDetailsModal
-        visible={bankModal}
-        onClose={() => setBankModal(false)}
-        initialAccountName={user?.accountName || ""}
-        initialAccountNumber={user?.accountNumber || ""}
-        initialBankName={user?.bankName || ""}
-        initialIfscCode={user?.ifscCode || ""}
-        onSuccess={showSuccessPopup}
-      />
-
-      {/* Premium Support Modal (Matching Home Page) */}
-      <Modal visible={showHelp} transparent animationType="slide">
-        <View style={styles.modalOverlayBlur}>
-           <Animated.View entering={FadeInUp} style={styles.modalSheet}>
-              <View style={styles.modalSheetHeader}>
-                 <View>
-                    <Text style={styles.modalSheetTitle}>{t('help')}</Text>
-                    <Text style={styles.modalSheetSubtitle}>How can we assist you today?</Text>
-                 </View>
-                 <TouchableOpacity onPress={() => setShowHelp(false)} style={styles.closeModalBtn}>
-                    <MaterialCommunityIcons name="close" size={24} color="#0F172A" />
-                 </TouchableOpacity>
-              </View>
-
-              <View style={styles.supportGridList}>
-                 <SupportTile 
-                   icon="phone-in-talk" 
-                   label="Call Support" 
-                   desc={`Call: ${supportNumber}`} 
-                   color="#C2410C" 
-                   onPress={() => Linking.openURL(`tel:${supportNumber}`)} 
-                 />
-                 <SupportTile 
-                   icon="whatsapp" 
-                   label="Chat with Us" 
-                   desc={`WhatsApp: ${supportNumber}`} 
-                   color="#25D366" 
-                   onPress={() => Linking.openURL(`https://wa.me/91${supportNumber}?text=Hi%2C%20I%20need%20help%20with%20Anusha%20Bazaar%20Delivery%20Partner%20app`)} 
-                 />
-                 <SupportTile 
-                   icon="frequently-asked-questions" 
-                   label="View FAQs" 
-                   desc="Browse helpful articles" 
-                   color="#F59E0B" 
-                   onPress={() => { setShowHelp(false); router.push('/help'); }} 
-                 />
-              </View>
-
-              <TouchableOpacity style={styles.modalActionBtnSecondary} onPress={() => setShowHelp(false)}>
-                 <Text style={styles.modalActionBtnTextSecondary}>Close</Text>
-              </TouchableOpacity>
-           </Animated.View>
-        </View>
-      </Modal>
-
-      <Modal visible={showLockedSupport} transparent animationType="fade">
-        <View style={styles.modalOverlayCenteredAlpha}>
-          <Animated.View entering={FadeInDown} style={styles.lockedSupportBox}>
-            <View style={styles.lockedSupportIcon}>
-              <MaterialCommunityIcons name="lock-check-outline" size={28} color="#F97316" />
-            </View>
-            <Text style={styles.lockedSupportTitle}>Contact Admin</Text>
-            <Text style={styles.lockedSupportSubtitle}>
-              Approved profiles are locked in the app. To update personal, vehicle, bank, or photo details, contact admin directly.
-            </Text>
-
-            <TouchableOpacity style={styles.lockedSupportPrimary} onPress={() => Linking.openURL(`tel:${supportNumber}`)}>
-              <MaterialCommunityIcons name="phone" size={20} color="#FFFFFF" />
-              <Text style={styles.lockedSupportPrimaryText}>Call Admin</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.lockedSupportSecondary} onPress={() => Linking.openURL(lockedWhatsappUrl)}>
-              <MaterialCommunityIcons name="whatsapp" size={20} color="#25D366" />
-              <Text style={styles.lockedSupportSecondaryText}>Chat on WhatsApp</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.lockedSupportClose} onPress={() => setShowLockedSupport(false)}>
-              <Text style={styles.lockedSupportCloseText}>Close</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {/* Premium Logout Modal */}
-      <Modal visible={showLogoutModal} transparent animationType="fade">
-        <View style={styles.modalOverlayCenteredAlpha}>
-          <Animated.View entering={FadeInDown} style={styles.logoutConfirmationBox}>
-            <View style={styles.logoutIconBadge}>
-               <MaterialCommunityIcons name="logout-variant" size={32} color="#EF4444" />
-            </View>
-            <Text style={styles.logoutModalTitle}>Confirm Logout</Text>
-            <Text style={styles.logoutModalSubtitle}>Are you sure you want to sign out? You&apos;ll need to login again to accept orders.</Text>
-            
-            <View style={styles.logoutModalActions}>
-               <TouchableOpacity style={styles.logoutCancelBtn} onPress={() => setShowLogoutModal(false)}>
-                  <Text style={styles.logoutCancelBtnText}>Cancel</Text>
-               </TouchableOpacity>
-               <TouchableOpacity style={styles.logoutConfirmBtn} onPress={confirmLogout}>
-                  <Text style={styles.logoutConfirmBtnText}>Logout</Text>
-               </TouchableOpacity>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
-    </View>
-    </>
-  );
-}
-
-interface StatCardMiniProps { label: string; value: string; icon: any; color: string; colors: string[] }
-
-function StatCardMini({ label, value, icon, color, colors }: StatCardMiniProps) {
-  return (
-    <View style={styles.statCellContainer}>
-      <LinearGradient colors={colors as any} style={styles.statCellGradient}>
-        <View style={styles.statCellHeader}>
-          <View style={[styles.statCellIconBox, { backgroundColor: color + '20' }]}>
-            <MaterialCommunityIcons name={icon} size={18} color={color} />
-          </View>
-        </View>
-        <Text style={styles.statCellValue}>{value}</Text>
-        <Text style={styles.statCellLabel}>{label}</Text>
-      </LinearGradient>
-    </View>
-  );
-}
-
-function MenuAction({ icon, label, onPress, value, status, locked }: any) {
-  return (
-    <TouchableOpacity onPress={onPress} style={[styles.menuLineItem, locked && { opacity: 0.75 }]}>
-       <View style={styles.menuLineLeft}>
-          <View style={[styles.menuLineIconBox, { backgroundColor: locked ? '#F8FAFC' : '#F1F5F9' }]}>
-             <MaterialCommunityIcons name={icon} size={20} color={locked ? '#94A3B8' : '#64748B'} />
-          </View>
-          <Text style={[styles.menuLineLabel, locked && { color: '#94A3B8' }]}>{label}</Text>
-       </View>
-       <View style={styles.menuLineRight}>
-          {value && <Text style={styles.menuLineValue} numberOfLines={1} ellipsizeMode="tail">{value}</Text>}
-          {status && (
-            <View style={[
-              styles.menuStatusBadge,
-              { backgroundColor: status === 'approved' ? '#DCFCE7' : status === 'rejected' ? '#FEE2E2' : '#FEF3C7' }
-            ]}>
-               <View style={[styles.kycStatusDot, {
-                 backgroundColor: status === 'approved' ? '#22C55E' : status === 'rejected' ? '#EF4444' : '#F59E0B'
-               }]} />
-               <Text style={[styles.menuStatusBadgeText, {
-                 color: status === 'approved' ? '#15803D' : status === 'rejected' ? '#DC2626' : '#C2410C'
-               }]}>
-                 {status.charAt(0).toUpperCase() + status.slice(1)}
-               </Text>
-            </View>
-          )}
-          <MaterialCommunityIcons
-            name={locked ? 'lock-outline' : 'chevron-right'}
-            size={20}
-            color={locked ? '#94A3B8' : '#CBD5E1'}
-          />
-       </View>
-    </TouchableOpacity>
-  );
-}
-
-function EditPersonalModal({ visible, onClose, initialName, phone, onSuccess }: any) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const { authState, updateProfile } = useUser();
-  const user = authState.user;
-
-  React.useEffect(() => {
-    if (initialName) {
-       const parts = initialName.split(" ");
-       setFirstName(parts[0] || "");
-       setLastName(parts.slice(1).join(" ") || "");
-    }
-  }, [initialName]);
-
-  const handleSave = async () => {
-    if (!firstName || !lastName) return Alert.alert("Incomplete", "First and Last Name are required.");
-    setSaving(true);
+  const handleSavePersonal = async () => {
+    if (!editName.trim()) return Alert.alert("Required", "Name cannot be empty.");
+    setPersonalSaving(true);
     try {
-      if (user?.id) {
-        await profileService.updateProfileDetailsById(user.id, { firstName, lastName });
-      } else {
-        await profileService.updateProfileDetails({ firstName, lastName });
-      }
-      await updateProfile({ name: `${firstName} ${lastName}` });
-      onClose();
-      setTimeout(() => {
-        onSuccess("Personal details successfully updated.");
-      }, 400);
+      const [first, ...rest] = editName.trim().split(" ");
+      await profileService.updateProfileDetails({ firstName: first, lastName: rest.join(" ") || "." });
+      await updateProfile({ name: editName.trim() });
+      setPersonalModal(false);
+      Alert.alert("Updated", "Personal details saved.");
     } catch (e: any) {
-      const status = e?.response?.status;
-      const errorMessage = e?.response?.data?.message || e?.response?.data?.error || e?.message || "Unknown Error";
-      Alert.alert("Update Failed", `Could not push identity updates to server.\n\nStatus: ${status || 'No Status'}\nError: ${errorMessage}`);
+      Alert.alert("Error", e?.message || "Could not save changes.");
     } finally {
-      setSaving(false);
+      setPersonalSaving(false);
     }
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-       <View style={styles.modalOverlayCenteredAlpha}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
-            <Animated.View entering={FadeInUp} style={[styles.infoSheetBox, { padding: 24 }]}>
-                <View style={[styles.modalSheetHeader, { marginBottom: 20 }]}>
-                    <Text style={styles.modalSheetTitle}>Edit Identity</Text>
-                    <TouchableOpacity onPress={onClose} style={styles.closeModalBtn}>
-                       <MaterialCommunityIcons name="close" size={24} color="#0F172A" />
-                    </TouchableOpacity>
-                 </View>
-
-                 <View style={{ flexDirection: "row", gap: 12, marginBottom: 16 }}>
-                    <View style={{ flex: 1 }}>
-                       <Text style={styles.inputLabelMicro}>FIRST NAME</Text>
-                       <TextInput style={styles.modalInput} value={firstName} onChangeText={setFirstName} autoCorrect={false} autoComplete="off" spellCheck={false} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                       <Text style={styles.inputLabelMicro}>LAST NAME</Text>
-                       <TextInput style={styles.modalInput} value={lastName} onChangeText={setLastName} autoCorrect={false} autoComplete="off" spellCheck={false} />
-                    </View>
-                 </View>
-
-                 <Text style={[styles.inputLabelMicro, { marginTop: 4 }]}>REGISTERED MOBILE (LOCKED)</Text>
-                 <TextInput style={[styles.modalInput, { backgroundColor: "#F1F5F9", color: "#64748B" }]} value={phone} editable={false} />
-
-                 <TouchableOpacity onPress={handleSave} disabled={saving} style={[styles.modalActionBtnPrimary, { marginTop: 24 }]}>
-                    {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalActionBtnTextPrimary}>Save Updates</Text>}
-                 </TouchableOpacity>
-            </Animated.View>
-          </KeyboardAvoidingView>
-       </View>
-    </Modal>
-  );
-}
-
-function EditVehicleModal({ visible, onClose, initialType, initialModel, initialRegNo, onSuccess }: any) {
-  const [vehicle, setVehicle] = useState(initialType || "Bike");
-  const [model, setModel] = useState(initialModel || "");
-  const [regNo, setRegNo] = useState(initialRegNo || "");
-  const [loading, setLoading] = useState(false);
-  const { authState, updateProfile } = useUser();
-  const user = authState.user;
-
-  const handleSave = async () => {
-    if (!model || !regNo) return Alert.alert("Incomplete", "Please provide the vehicle model and registration number.");
-    setLoading(true);
+  const handleSaveVehicle = async () => {
+    setVehicleSaving(true);
     try {
-      if (user?.id) {
-        await profileService.updateVehicleById(user.id, {
-          vehicleType: vehicle.toUpperCase(),
-          vehicleModel: model,
-          registrationNumber: regNo
-        });
-      } else {
-        await profileService.updateVehicle({
-          vehicleType: vehicle.toUpperCase(),
-          vehicleModel: model,
-          registrationNumber: regNo
-        });
-      }
-      await updateProfile({ vehicleType: vehicle });
-      onClose();
-      setTimeout(() => {
-        onSuccess("Vehicle information updated successfully.");
-      }, 400);
+      await profileService.updateVehicle({
+        vehicleType: user?.vehicleType || "BIKE",
+        vehicleModel: editVehicleModel,
+        registrationNumber: editVehicleReg,
+      });
+      setVehicleModal(false);
+      Alert.alert("Updated", "Vehicle details saved.");
     } catch (e: any) {
-      const status = e?.response?.status;
-      const errorMessage = e?.response?.data?.message || e?.response?.data?.error || e?.message || "Unknown Error";
-      Alert.alert("Update Failed", `Could not save your vehicle details right now.\n\nStatus: ${status || 'No Status'}\nError: ${errorMessage}`);
+      Alert.alert("Error", e?.message || "Could not save vehicle info.");
     } finally {
-      setLoading(false);
+      setVehicleSaving(false);
     }
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-       <View style={styles.modalOverlayCenteredAlpha}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
-            <Animated.View entering={FadeInUp} style={[styles.infoSheetBox, { padding: 24 }]}>
-                <View style={[styles.modalSheetHeader, { marginBottom: 20 }]}>
-                    <Text style={styles.modalSheetTitle}>Edit Vehicle Info</Text>
-                    <TouchableOpacity onPress={onClose} style={styles.closeModalBtn}>
-                       <MaterialCommunityIcons name="close" size={24} color="#0F172A" />
-                    </TouchableOpacity>
-                 </View>
-                 
-                 <Text style={styles.inputLabelMicro}>VEHICLE TYPE</Text>
-                 <View style={styles.vehicleChipGrid}>
-                    {["Bike", "Scooter", "Auto", "Heavy"].map(v => (
-                       <TouchableOpacity key={v} onPress={() => setVehicle(v)} style={[styles.vChip, vehicle === v && styles.vChipActive]}>
-                          <Text style={[styles.vChipText, vehicle === v && styles.vChipTextActive]}>{v}</Text>
-                       </TouchableOpacity>
-                    ))}
-                 </View>
-
-                 <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>VEHICLE MODEL</Text>
-                 <TextInput
-                   style={styles.modalInput}
-                   placeholder="e.g. Honda Activa 6G"
-                   placeholderTextColor="#94A3B8"
-                   value={model}
-                   onChangeText={setModel}
-                   autoCorrect={false}
-                   autoComplete="off"
-                   spellCheck={false}
-                 />
-
-                 <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>REGISTRATION NUMBER</Text>
-                 <TextInput
-                   style={styles.modalInput}
-                   placeholder="e.g. AP 39 XY 1234"
-                   placeholderTextColor="#94A3B8"
-                   value={regNo}
-                   onChangeText={setRegNo}
-                   autoCapitalize="characters"
-                   autoCorrect={false}
-                   autoComplete="off"
-                   spellCheck={false}
-                 />
-
-                 <TouchableOpacity onPress={handleSave} disabled={loading} style={[styles.modalActionBtnPrimary, loading && { opacity: 0.7 }]}>
-                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalActionBtnTextPrimary}>Save Updates</Text>}
-                 </TouchableOpacity>
-            </Animated.View>
-          </KeyboardAvoidingView>
-       </View>
-    </Modal>
-  );
-}
-
-function BankDetailsModal({ visible, onClose, initialAccountName, initialAccountNumber, initialBankName, initialIfscCode, onSuccess }: any) {
-  const [accountName, setAccountName] = useState(initialAccountName || "");
-  const [accountNumber, setAccountNumber] = useState(initialAccountNumber || "");
-  const [confirmAccountNumber, setConfirmAccountNumber] = useState(initialAccountNumber || "");
-  const [bankName, setBankName] = useState(initialBankName || "");
-  const [ifscCode, setIfscCode] = useState(initialIfscCode || "");
-  const [loading, setLoading] = useState(false);
-  const [bankSearchQuery, setBankSearchQuery] = useState(initialBankName || "");
-  const [bankSelected, setBankSelected] = useState(Boolean(initialBankName));
-  const [bankOptions, setBankOptions] = useState<BankOption[]>([]);
-  const [bankSearching, setBankSearching] = useState(false);
-  const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
-  const bankSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setAccountName(initialAccountName || "");
-    setAccountNumber(initialAccountNumber || "");
-    setConfirmAccountNumber(initialAccountNumber || "");
-    setBankName(initialBankName || "");
-    setBankSearchQuery(initialBankName || "");
-    setIfscCode(initialIfscCode || "");
-    setBankSelected(Boolean(initialBankName));
-    setBankOptions([]);
-    setBankDropdownOpen(false);
-  }, [initialAccountName, initialAccountNumber, initialBankName, initialIfscCode, visible]);
-
-  useEffect(() => () => {
+  const handleBankSearch = (q: string) => {
+    setBankSearchQuery(q);
+    setBankSelected(false);
     if (bankSearchTimer.current) clearTimeout(bankSearchTimer.current);
-  }, []);
-
-  const searchBanks = (query: string, preserveSelection = false) => {
-    setBankSearchQuery(query);
+    if (!q.trim()) { setBankOptions([]); setBankDropdownOpen(false); return; }
     setBankDropdownOpen(true);
-    if (!preserveSelection) {
-      setBankSelected(false);
-      setBankName("");
-    }
-    if (bankSearchTimer.current) clearTimeout(bankSearchTimer.current);
     setBankSearching(true);
     bankSearchTimer.current = setTimeout(async () => {
       try {
-        const results = await bankService.search(query);
-        setBankOptions(results);
+        const opts = await bankService.search(q);
+        setBankOptions(opts.slice(0, 8));
       } catch {
         setBankOptions([]);
       } finally {
         setBankSearching(false);
       }
-    }, 250);
+    }, 350);
   };
 
-  const loadPopularBanks = () => {
-    setBankDropdownOpen(true);
-    if (bankOptions.length > 0) return;
-    searchBanks('', true);
-  };
-
-  const selectBank = (bank: BankOption) => {
-    setBankName(bank.name);
-    setBankSearchQuery(bank.name);
-    setBankSelected(true);
-    setBankDropdownOpen(false);
-    setBankOptions([]);
-    if (!ifscCode.trim() && bank.ifscPrefix) {
-      setIfscCode(`${bank.ifscPrefix}0`);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!accountName.trim()) return Alert.alert("Required", "Please enter the account holder name.");
-    if (!accountNumber.trim() || accountNumber.length < 9) return Alert.alert("Invalid", "Account number must be at least 9 digits.");
-    if (accountNumber !== confirmAccountNumber) return Alert.alert("Mismatch", "Account numbers do not match. Please re-enter.");
-    if (!bankSelected || !bankName.trim()) return Alert.alert("Required", "Select your bank from the dropdown list.");
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-    if (!ifscRegex.test(ifscCode.toUpperCase())) return Alert.alert("Invalid IFSC", "IFSC code format should be like SBIN0001234.");
-
-    setLoading(true);
+  const handleSaveBank = async () => {
+    if (!bankAccountName.trim() || !bankAccountNumber.trim() || !bankIfscCode.trim())
+      return Alert.alert("Required", "Please fill all bank fields.");
+    if (bankAccountNumber !== bankConfirmNumber)
+      return Alert.alert("Mismatch", "Account numbers do not match.");
+    setBankSaving(true);
     try {
       await profileService.updateBankDetails({
-        accountName: accountName.trim(),
-        accountNumber: accountNumber.trim(),
-        bankName: bankName.trim(),
-        ifscCode: ifscCode.toUpperCase().trim(),
+        accountName: bankAccountName,
+        bankName,
+        accountNumber: bankAccountNumber,
+        ifscCode: bankIfscCode,
       });
-      onClose();
-      setTimeout(() => onSuccess("Bank details saved successfully."), 400);
+      setBankModal(false);
+      Alert.alert("Saved", "Bank details updated.");
     } catch (e: any) {
-      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || "Unknown error";
-      Alert.alert("Save Failed", msg);
+      Alert.alert("Error", e?.message || "Could not save bank info.");
     } finally {
-      setLoading(false);
+      setBankSaving(false);
     }
   };
 
+  const s = makeStyles(theme);
+
+  // Phone display helper
+  const displayPhone = (() => {
+    const digits = (user?.phone || "").replace(/\D/g, "");
+    const normalized = digits.length > 10 ? digits.slice(-10) : digits || "0000000000";
+    return `+91 ${normalized}`;
+  })();
+
+  const displayId = (() => {
+    const digits = (user?.phone || "").replace(/\D/g, "");
+    const normalized = digits.length > 10 ? digits.slice(-10) : digits || "0000000000";
+    return `ID: AB-${normalized.slice(-4)}`;
+  })();
+
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.modalOverlayCenteredAlpha}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
-          <Animated.View entering={FadeInUp} style={[styles.infoSheetBox, { padding: 24 }]}>
-            <View style={[styles.modalSheetHeader, { marginBottom: 4 }]}>
-              <Text style={styles.modalSheetTitle}>Bank Details</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeModalBtn}>
-                <MaterialCommunityIcons name="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
-            <Text style={{ color: '#64748B', fontSize: 12, marginBottom: 20 }}>Used for salary and delivery earnings payouts</Text>
+    <>
+      <View style={s.container}>
+        <StatusBar style={theme.statusBar} />
+        <SafeAreaView style={s.safe} edges={["top"]}>
 
-            <Text style={styles.inputLabelMicro}>ACCOUNT HOLDER NAME</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="As per bank records"
-              placeholderTextColor="#94A3B8"
-              value={accountName}
-              onChangeText={setAccountName}
-              autoCapitalize="words"
-              autoCorrect={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-
-            <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>BANK NAME</Text>
-            <View>
-              <View style={styles.modalSearchField}>
-                <MaterialCommunityIcons name="magnify" size={20} color="#F97316" />
-                <TextInput
-                  style={styles.modalSearchInput}
-                  placeholder="Search your bank (e.g. State Bank)"
-                  placeholderTextColor="#94A3B8"
-                  value={bankSearchQuery}
-                  onChangeText={(value) => searchBanks(value)}
-                  onFocus={loadPopularBanks}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                {bankSearching ? (
-                  <ActivityIndicator size="small" color="#F97316" />
-                ) : bankSelected ? (
-                  <MaterialCommunityIcons name="check-circle" size={18} color="#16A34A" />
-                ) : null}
-              </View>
-              <Text style={styles.modalHelperText}>
-                {bankSelected
-                  ? "Bank selected from the approved list."
-                  : "Choose your bank from the dropdown list to auto-suggest the IFSC prefix."}
-              </Text>
-              {bankDropdownOpen && bankOptions.length > 0 ? (
-                <View style={styles.modalBankDropdown}>
-                  <FlatList
-                    data={bankOptions}
-                    keyExtractor={(item) => String(item.id)}
-                    keyboardShouldPersistTaps="handled"
-                    scrollEnabled={false}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity style={styles.modalBankDropdownItem} onPress={() => selectBank(item)}>
-                        <MaterialCommunityIcons name="bank" size={18} color="#F97316" />
-                        <View style={{ flex: 1, marginLeft: 10 }}>
-                          <Text style={styles.modalBankDropdownName}>{item.name}</Text>
-                          <Text style={styles.modalBankDropdownCode}>{item.ifscPrefix} · {item.shortCode}</Text>
-                        </View>
-                        <MaterialCommunityIcons name="chevron-right" size={16} color="#94A3B8" />
-                      </TouchableOpacity>
-                    )}
-                    ItemSeparatorComponent={() => <View style={styles.modalBankDivider} />}
-                  />
-                </View>
-              ) : null}
-            </View>
-
-            <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>ACCOUNT NUMBER</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Enter account number"
-              placeholderTextColor="#94A3B8"
-              value={accountNumber}
-              onChangeText={setAccountNumber}
-              keyboardType="number-pad"
-              autoCorrect={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-
-            <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>CONFIRM ACCOUNT NUMBER</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Re-enter account number"
-              placeholderTextColor="#94A3B8"
-              value={confirmAccountNumber}
-              onChangeText={setConfirmAccountNumber}
-              keyboardType="number-pad"
-              autoCorrect={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-
-            <Text style={[styles.inputLabelMicro, { marginTop: 16 }]}>IFSC CODE</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. SBIN0001234"
-              placeholderTextColor="#94A3B8"
-              value={ifscCode}
-              onChangeText={(v) => setIfscCode(v.toUpperCase())}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={11}
-            />
-
-            <TouchableOpacity
-              onPress={handleSave}
-              disabled={loading}
-              style={[styles.modalActionBtnPrimary, loading && { opacity: 0.7 }, { marginTop: 24 }]}
-            >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.modalActionBtnTextPrimary}>Save Bank Details</Text>}
+          {/* ── Header ── */}
+          <View style={s.header}>
+            <Text style={s.headerTitle}>Account</Text>
+            <TouchableOpacity onPress={toggleTheme} style={s.themeToggleBtn}>
+              <MaterialCommunityIcons
+                name={isDark ? "weather-sunny" : "weather-night"}
+                size={22}
+                color={theme.primary}
+              />
             </TouchableOpacity>
-          </Animated.View>
-        </KeyboardAvoidingView>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={s.scrollContent}
+          >
+            {/* ── Profile Hero Card ── */}
+            <Animated.View entering={FadeInDown.duration(500)}>
+              <LinearGradient
+                colors={isDark ? ["#1C2128", "#161B22"] : ["#111827", "#1F2937"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.heroCard}
+              >
+                {/* Theme toggle inside card */}
+                <View style={s.heroRow}>
+                  <TouchableOpacity onPress={handleUpdateAvatar} style={s.avatarContainer}>
+                    <View style={s.avatarRing}>
+                      {isUploadingPhoto ? (
+                        <View style={s.avatarPlaceholder}>
+                          <ActivityIndicator size="small" color="#F97316" />
+                        </View>
+                      ) : user?.photo ? (
+                        <Image source={{ uri: user.photo }} style={s.avatar} />
+                      ) : (
+                        <View style={s.avatarPlaceholder}>
+                          <MaterialCommunityIcons name="account" size={40} color="#F97316" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={s.cameraBadge}>
+                      <MaterialCommunityIcons name="camera" size={12} color="#fff" />
+                    </View>
+                  </TouchableOpacity>
+
+                  <View style={{ flex: 1, marginLeft: 16 }}>
+                    <Text style={s.heroName}>{user?.name || "Rider Partner"}</Text>
+                    <Text style={s.heroPhone}>{displayPhone}</Text>
+                    <View style={s.heroBadge}>
+                      <MaterialCommunityIcons name="identifier" size={12} color="#F97316" />
+                      <Text style={s.heroBadgeText}>{displayId}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Status badges */}
+                <View style={s.heroStatusRow}>
+                  <View style={[s.heroStatusChip, { backgroundColor: isApproved ? "#16A34A22" : "#F9731622" }]}>
+                    <View style={[s.heroStatusDot, { backgroundColor: isApproved ? "#16A34A" : "#F97316" }]} />
+                    <Text style={[s.heroStatusText, { color: isApproved ? "#4ADE80" : "#FCA07D" }]}>
+                      {isApproved ? "Verified Partner" : "Pending Approval"}
+                    </Text>
+                  </View>
+                  <View style={[s.heroStatusChip, { backgroundColor: "#2563EB22" }]}>
+                    <MaterialCommunityIcons name="star" size={12} color="#60A5FA" />
+                    <Text style={[s.heroStatusText, { color: "#93C5FD" }]}>{profileStats.rating} Rating</Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </Animated.View>
+
+            {/* ── Stats Row ── */}
+            <Animated.View entering={FadeInDown.delay(100)} style={s.statsRow}>
+              <StatCardMini
+                label="Total Trips"
+                value={profileStats.totalTrips.toString()}
+                icon="bike"
+                color="#F97316"
+                theme={theme}
+              />
+              <StatCardMini
+                label="Rating"
+                value={profileStats.rating}
+                icon="star"
+                color="#FBBF24"
+                theme={theme}
+              />
+              <StatCardMini
+                label="Status"
+                value={isApproved ? "Active" : "Pending"}
+                icon="shield-check"
+                color={isApproved ? "#16A34A" : "#F97316"}
+                theme={theme}
+              />
+            </Animated.View>
+
+            {/* ── Locked Banner ── */}
+            {isApproved && (
+              <Animated.View entering={FadeInDown.delay(150)}>
+                <TouchableOpacity
+                  style={[s.lockedBanner, { backgroundColor: theme.dangerSoft, borderColor: theme.danger + "44" }]}
+                  onPress={() => setShowLockedSupport(true)}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons name="lock-check-outline" size={16} color={theme.danger} />
+                  <Text style={[s.lockedBannerText, { color: theme.danger }]}>
+                    Account approved — contact support to modify locked details.
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-right" size={16} color={theme.danger} />
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            {/* ── Account Configuration ── */}
+            <Animated.View entering={FadeInDown.delay(180)}>
+              <Text style={s.sectionTitle}>Account Configuration</Text>
+              <View style={[s.menuCard, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}>
+                <MenuAction
+                  icon="account-details-outline"
+                  label="Personal Details"
+                  locked={isApproved}
+                  onPress={() => {
+                    if (isApproved) { setShowLockedSupport(true); return; }
+                    setEditName(user?.name || "");
+                    setPersonalModal(true);
+                  }}
+                  theme={theme}
+                />
+                <View style={[s.menuDivider, { backgroundColor: theme.divider }]} />
+                <MenuAction
+                  icon="car-info"
+                  label="Vehicle Information"
+                  locked={isApproved}
+                  value={user?.vehicleModel ? `${user.vehicleType} · ${user.vehicleModel}` : user?.vehicleType}
+                  onPress={() => {
+                    if (isApproved) { setShowLockedSupport(true); return; }
+                    setEditVehicleModel(user?.vehicleModel || "");
+                    setEditVehicleReg(user?.registrationNumber || "");
+                    setVehicleModal(true);
+                  }}
+                  theme={theme}
+                />
+                <View style={[s.menuDivider, { backgroundColor: theme.divider }]} />
+                <MenuAction
+                  icon="bank-outline"
+                  label="Bank Details"
+                  locked={isApproved}
+                  value={user?.bankName || undefined}
+                  onPress={() => {
+                    if (isApproved) { setShowLockedSupport(true); return; }
+                    setBankAccountName(user?.bankAccountName || "");
+                    setBankName(user?.bankName || "");
+                    setBankAccountNumber(user?.bankAccountNumber || "");
+                    setBankConfirmNumber(user?.bankAccountNumber || "");
+                    setBankIfscCode(user?.ifscCode || "");
+                    setBankModal(true);
+                  }}
+                  theme={theme}
+                />
+                <View style={[s.menuDivider, { backgroundColor: theme.divider }]} />
+                <MenuAction
+                  icon="shield-check-outline"
+                  label="KYC Verification"
+                  status={authState.verificationStatus || "pending"}
+                  onPress={() => router.push("/kyc")}
+                  theme={theme}
+                />
+              </View>
+            </Animated.View>
+
+            {/* ── Preferences ── */}
+            <Animated.View entering={FadeInDown.delay(220)}>
+              <Text style={s.sectionTitle}>Preferences</Text>
+              <View style={[s.menuCard, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}>
+                <MenuAction
+                  icon={isDark ? "weather-night" : "weather-sunny"}
+                  label={isDark ? "Dark Theme" : "Light Theme"}
+                  isSwitch
+                  switchValue={isDark}
+                  onSwitchChange={toggleTheme}
+                  theme={theme}
+                />
+                <View style={[s.menuDivider, { backgroundColor: theme.divider }]} />
+                <MenuAction
+                  icon="translate"
+                  label={t("language")}
+                  value={language === "en" ? "English" : "Telugu"}
+                  onPress={() => setLangModal(true)}
+                  theme={theme}
+                />
+              </View>
+            </Animated.View>
+
+            {/* ── Support & Legal ── */}
+            <Animated.View entering={FadeInDown.delay(260)}>
+              <Text style={s.sectionTitle}>Support & Legal</Text>
+              <View style={[s.menuCard, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}>
+                <MenuAction
+                  icon="help-circle-outline"
+                  label={t("help")}
+                  onPress={() => setShowHelp(true)}
+                  theme={theme}
+                />
+                <View style={[s.menuDivider, { backgroundColor: theme.divider }]} />
+                <MenuAction
+                  icon="file-document-outline"
+                  label="Terms & Conditions"
+                  onPress={() => router.push("/terms")}
+                  theme={theme}
+                />
+                <View style={[s.menuDivider, { backgroundColor: theme.divider }]} />
+                <MenuAction
+                  icon="information-outline"
+                  label="About Anusha Bazaar"
+                  onPress={() => router.push("/about")}
+                  theme={theme}
+                />
+              </View>
+            </Animated.View>
+
+            {/* ── Logout ── */}
+            <Animated.View entering={FadeInDown.delay(300)}>
+              <TouchableOpacity
+                onPress={handleLogout}
+                style={[s.logoutBtn, { backgroundColor: theme.dangerSoft, borderColor: theme.danger + "44" }]}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="logout-variant" size={22} color={theme.danger} />
+                <Text style={[s.logoutText, { color: theme.danger }]}>{t("logout")}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+
+            {/* ── Version ── */}
+            <View style={s.footer}>
+              <Text style={[s.footerText, { color: theme.textSoft }]}>Version 2.4.0 (Build 56)</Text>
+              <Text style={[s.footerText, { color: theme.textSoft }]}>© 2026 Anusha Bazaar Logistics</Text>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            MODALS
+        ══════════════════════════════════════════════════════════════════════ */}
+
+        {/* ── Language Modal ── */}
+        <Modal visible={langModal} transparent animationType="slide">
+          <Pressable style={s.modalOverlay} onPress={() => setLangModal(false)}>
+            <Animated.View entering={FadeInUp} style={[s.modalSheet, { backgroundColor: theme.surface }]}>
+              <View style={[s.modalHandle, { backgroundColor: theme.border }]} />
+              <Text style={[s.modalTitle, { color: theme.text }]}>Select Language</Text>
+              {[
+                { code: "en", label: "English", emoji: "🇬🇧" },
+                { code: "te", label: "Telugu", emoji: "🇮🇳" },
+              ].map(({ code, label, emoji }) => (
+                <TouchableOpacity
+                  key={code}
+                  style={[
+                    s.langRow,
+                    language === code && { backgroundColor: theme.primaryGlow },
+                    { borderColor: theme.border },
+                  ]}
+                  onPress={() => changeLang(code as Language)}
+                >
+                  <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                  <Text style={[s.langLabel, { color: theme.text }]}>{label}</Text>
+                  {language === code && (
+                    <MaterialCommunityIcons name="check-circle" size={20} color={theme.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </Animated.View>
+          </Pressable>
+        </Modal>
+
+        {/* ── Personal Details Modal ── */}
+        <Modal visible={personalModal} transparent animationType="slide">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
+            <Pressable style={s.modalOverlay} onPress={() => setPersonalModal(false)}>
+              <Animated.View
+                entering={FadeInUp}
+                style={[s.modalSheet, { backgroundColor: theme.surface }]}
+              >
+                <View style={[s.modalHandle, { backgroundColor: theme.border }]} />
+                <Text style={[s.modalTitle, { color: theme.text }]}>Edit Personal Details</Text>
+                <Text style={[s.inputLabel, { color: theme.textMuted }]}>Full Name</Text>
+                <TextInput
+                  value={editName}
+                  onChangeText={setEditName}
+                  style={[s.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.inputText }]}
+                  placeholder="Your full name"
+                  placeholderTextColor={theme.inputPlaceholder}
+                />
+                <TouchableOpacity
+                  style={[s.saveBtn, { backgroundColor: theme.primary }]}
+                  onPress={handleSavePersonal}
+                  disabled={personalSaving}
+                >
+                  {personalSaving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={s.saveBtnText}>Save Changes</Text>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* ── Vehicle Modal ── */}
+        <Modal visible={vehicleModal} transparent animationType="slide">
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+            <Pressable style={s.modalOverlay} onPress={() => setVehicleModal(false)}>
+              <Animated.View entering={FadeInUp} style={[s.modalSheet, { backgroundColor: theme.surface }]}>
+                <View style={[s.modalHandle, { backgroundColor: theme.border }]} />
+                <Text style={[s.modalTitle, { color: theme.text }]}>Vehicle Information</Text>
+                <Text style={[s.inputLabel, { color: theme.textMuted }]}>Vehicle Model</Text>
+                <TextInput
+                  value={editVehicleModel}
+                  onChangeText={setEditVehicleModel}
+                  style={[s.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.inputText }]}
+                  placeholder="e.g. Honda Activa"
+                  placeholderTextColor={theme.inputPlaceholder}
+                />
+                <Text style={[s.inputLabel, { color: theme.textMuted }]}>Registration Number</Text>
+                <TextInput
+                  value={editVehicleReg}
+                  onChangeText={setEditVehicleReg}
+                  style={[s.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.inputText }]}
+                  placeholder="e.g. AP09AB1234"
+                  placeholderTextColor={theme.inputPlaceholder}
+                  autoCapitalize="characters"
+                />
+                <TouchableOpacity
+                  style={[s.saveBtn, { backgroundColor: theme.primary }]}
+                  onPress={handleSaveVehicle}
+                  disabled={vehicleSaving}
+                >
+                  {vehicleSaving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save</Text>}
+                </TouchableOpacity>
+              </Animated.View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* ── Bank Modal ── */}
+        <Modal visible={bankModal} transparent animationType="slide">
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+            <Pressable style={s.modalOverlay} onPress={() => setBankModal(false)}>
+              <Animated.View entering={FadeInUp} style={[s.modalSheet, { backgroundColor: theme.surface }]}>
+                <View style={[s.modalHandle, { backgroundColor: theme.border }]} />
+                <Text style={[s.modalTitle, { color: theme.text }]}>Bank Details</Text>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
+                  <Text style={[s.inputLabel, { color: theme.textMuted }]}>Account Holder Name</Text>
+                  <TextInput value={bankAccountName} onChangeText={setBankAccountName}
+                    style={[s.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.inputText }]}
+                    placeholder="Full name on bank account" placeholderTextColor={theme.inputPlaceholder} />
+                  <Text style={[s.inputLabel, { color: theme.textMuted }]}>Bank Name</Text>
+                  <TextInput value={bankSearchQuery} onChangeText={handleBankSearch}
+                    style={[s.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.inputText }]}
+                    placeholder="Search bank..." placeholderTextColor={theme.inputPlaceholder} />
+                  {bankDropdownOpen && (
+                    <View style={[s.dropdown, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                      {bankSearching ? <ActivityIndicator color={theme.primary} style={{ padding: 12 }} /> :
+                        bankOptions.map((b, i) => (
+                          <TouchableOpacity key={i}
+                            style={[s.dropdownItem, { borderBottomColor: theme.divider }]}
+                            onPress={() => {
+                              setBankName(b.name || b.bankName || "");
+                              setBankSearchQuery(b.name || b.bankName || "");
+                              setBankSelected(true);
+                              setBankDropdownOpen(false);
+                            }}>
+                            <Text style={[s.dropdownText, { color: theme.text }]}>{b.name || b.bankName}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  )}
+                  <Text style={[s.inputLabel, { color: theme.textMuted }]}>Account Number</Text>
+                  <TextInput value={bankAccountNumber} onChangeText={setBankAccountNumber} keyboardType="number-pad"
+                    style={[s.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.inputText }]}
+                    placeholder="Account number" placeholderTextColor={theme.inputPlaceholder} />
+                  <Text style={[s.inputLabel, { color: theme.textMuted }]}>Confirm Account Number</Text>
+                  <TextInput value={bankConfirmNumber} onChangeText={setBankConfirmNumber} keyboardType="number-pad"
+                    style={[s.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.inputText }]}
+                    placeholder="Re-enter account number" placeholderTextColor={theme.inputPlaceholder} />
+                  <Text style={[s.inputLabel, { color: theme.textMuted }]}>IFSC Code</Text>
+                  <TextInput value={bankIfscCode} onChangeText={setBankIfscCode} autoCapitalize="characters"
+                    style={[s.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.inputText }]}
+                    placeholder="IFSC Code" placeholderTextColor={theme.inputPlaceholder} />
+                </ScrollView>
+                <TouchableOpacity
+                  style={[s.saveBtn, { backgroundColor: theme.primary, marginTop: 16 }]}
+                  onPress={handleSaveBank} disabled={bankSaving}>
+                  {bankSaving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Bank Details</Text>}
+                </TouchableOpacity>
+              </Animated.View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* ── Locked Support Modal ── */}
+        <Modal visible={showLockedSupport} transparent animationType="fade">
+          <View style={s.modalOverlay}>
+            <Animated.View entering={FadeInUp} style={[s.lockedModal, { backgroundColor: theme.surface }]}>
+              <MaterialCommunityIcons name="lock-check" size={44} color={theme.primary} style={{ marginBottom: 12 }} />
+              <Text style={[s.lockedModalTitle, { color: theme.text }]}>Details are locked</Text>
+              <Text style={[s.lockedModalSub, { color: theme.textMuted }]}>
+                Your account is verified. To modify personal, vehicle, or bank details, contact our support team.
+              </Text>
+              <TouchableOpacity
+                style={[s.saveBtn, { backgroundColor: "#25D366", marginTop: 16 }]}
+                onPress={() => { setShowLockedSupport(false); Linking.openURL(lockedWhatsappUrl); }}
+              >
+                <MaterialCommunityIcons name="whatsapp" size={18} color="#fff" />
+                <Text style={[s.saveBtnText, { marginLeft: 8 }]}>Contact Support on WhatsApp</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowLockedSupport(false)} style={{ marginTop: 12, padding: 8 }}>
+                <Text style={[{ color: theme.textMuted, fontSize: 14 }]}>Close</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        </Modal>
+
+        {/* ── Help Modal ── */}
+        <Modal visible={showHelp} transparent animationType="slide">
+          <Pressable style={s.modalOverlay} onPress={() => setShowHelp(false)}>
+            <Animated.View entering={FadeInUp} style={[s.modalSheet, { backgroundColor: theme.surface }]}>
+              <View style={[s.modalHandle, { backgroundColor: theme.border }]} />
+              <Text style={[s.modalTitle, { color: theme.text }]}>Help & Support</Text>
+              <Text style={[{ color: theme.textMuted, fontSize: 14, lineHeight: 22 }]}>
+                For any issues or queries, contact us:{"\n\n"}
+                📞 WhatsApp: +91 6309981555{"\n"}
+                🕐 Available: 9 AM – 9 PM IST
+              </Text>
+              <TouchableOpacity
+                style={[s.saveBtn, { backgroundColor: "#25D366", marginTop: 20 }]}
+                onPress={() => Linking.openURL(`https://wa.me/916309981555`)}
+              >
+                <MaterialCommunityIcons name="whatsapp" size={18} color="#fff" />
+                <Text style={[s.saveBtnText, { marginLeft: 8 }]}>Open WhatsApp</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+
+        {/* ── Logout Confirmation ── */}
+        <Modal visible={showLogoutModal} transparent animationType="fade">
+          <View style={s.modalOverlay}>
+            <Animated.View entering={FadeInUp} style={[s.logoutModal, { backgroundColor: theme.surface }]}>
+              <MaterialCommunityIcons name="logout-variant" size={44} color={theme.danger} style={{ marginBottom: 8 }} />
+              <Text style={[s.logoutModalTitle, { color: theme.text }]}>Sign out?</Text>
+              <Text style={[{ color: theme.textMuted, fontSize: 14, textAlign: "center", marginBottom: 24 }]}>
+                You will need to log in again to accept deliveries.
+              </Text>
+              <TouchableOpacity
+                style={[s.saveBtn, { backgroundColor: theme.danger }]}
+                onPress={confirmLogout}
+              >
+                <Text style={s.saveBtnText}>Yes, Sign Out</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowLogoutModal(false)}
+                style={{ marginTop: 12, padding: 10 }}
+              >
+                <Text style={[{ color: theme.textMuted, fontSize: 14 }]}>Cancel</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        </Modal>
       </View>
-    </Modal>
+    </>
   );
 }
 
-function SupportTile({ icon, label, desc, color, onPress }: { icon: any, label: string, desc: string, color: string, onPress: () => void }) {
-  return (
-    <TouchableOpacity onPress={onPress} style={styles.supportListItem}>
-       <View style={[styles.supportIconBox, { backgroundColor: color + '15' }]}>
-          <MaterialCommunityIcons name={icon} size={26} color={color} />
-       </View>
-       <View style={styles.supportTextWrap}>
-          <Text style={styles.supportLabelText}>{label}</Text>
-          <Text style={styles.supportDescText}>{desc}</Text>
-       </View>
-       <MaterialCommunityIcons name="chevron-right" size={20} color="#CBD5E1" />
-    </TouchableOpacity>
-  );
+// ─── Styles factory (theme-aware) ─────────────────────────────────────────────
+
+function makeStyles(theme: any) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.bg },
+    safe: { flex: 1 },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      backgroundColor: theme.headerBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    headerTitle: { fontSize: 20, fontWeight: "800", color: theme.headerText, letterSpacing: -0.5 },
+    themeToggleBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.primaryGlow,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    scrollContent: { paddingHorizontal: 16, paddingBottom: 100, paddingTop: 12 },
+
+    // Hero card
+    heroCard: { borderRadius: 20, padding: 20, marginBottom: 12 },
+    heroRow: { flexDirection: "row", alignItems: "center" },
+    avatarContainer: { position: "relative" },
+    avatarRing: {
+      width: 76,
+      height: 76,
+      borderRadius: 38,
+      borderWidth: 3,
+      borderColor: "#F97316",
+      overflow: "hidden",
+      backgroundColor: "#1F2937",
+    },
+    avatar: { width: "100%", height: "100%" },
+    avatarPlaceholder: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#1F2937",
+    },
+    cameraBadge: {
+      position: "absolute",
+      bottom: 0,
+      right: 0,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: "#F97316",
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+      borderColor: "#111827",
+    },
+    heroName: { color: "#FFFFFF", fontSize: 18, fontWeight: "800", letterSpacing: -0.3 },
+    heroPhone: { color: "#94A3B8", fontSize: 13, marginTop: 2 },
+    heroBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 6,
+      backgroundColor: "#F9731620",
+      alignSelf: "flex-start",
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+      gap: 4,
+    },
+    heroBadgeText: { color: "#F97316", fontSize: 11, fontWeight: "700" },
+    heroStatusRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 14,
+    },
+    heroStatusChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+    },
+    heroStatusDot: { width: 7, height: 7, borderRadius: 4 },
+    heroStatusText: { fontSize: 11, fontWeight: "700" },
+
+    // Stats
+    statsRow: { flexDirection: "row", marginBottom: 12 },
+
+    // Locked banner
+    lockedBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 12,
+    },
+    lockedBannerText: { flex: 1, fontSize: 12, fontWeight: "600", lineHeight: 16 },
+
+    // Section title
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: theme.textSoft,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 8,
+      marginTop: 16,
+      marginLeft: 4,
+    },
+
+    // Menu card
+    menuCard: {
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+      marginBottom: 4,
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 1,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    menuDivider: { height: 1, marginLeft: 66 },
+
+    // Logout
+    logoutBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      padding: 14,
+      borderRadius: 16,
+      borderWidth: 1,
+      marginTop: 20,
+    },
+    logoutText: { fontSize: 15, fontWeight: "700" },
+
+    // Footer
+    footer: { alignItems: "center", marginTop: 24, paddingBottom: 12, gap: 4 },
+    footerText: { fontSize: 12 },
+
+    // Modal
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "flex-end",
+    },
+    modalSheet: {
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 24,
+      paddingBottom: 40,
+    },
+    modalHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 20 },
+    modalTitle: { fontSize: 18, fontWeight: "800", marginBottom: 16 },
+    inputLabel: { fontSize: 12, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
+    input: {
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 15,
+      marginBottom: 12,
+    },
+    saveBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 14,
+      paddingVertical: 14,
+    },
+    saveBtnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+
+    // Language modal
+    langRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 8,
+    },
+    langLabel: { flex: 1, fontSize: 16, fontWeight: "600" },
+
+    // Dropdown
+    dropdown: {
+      borderWidth: 1,
+      borderRadius: 12,
+      marginTop: -8,
+      marginBottom: 8,
+      overflow: "hidden",
+    },
+    dropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1 },
+    dropdownText: { fontSize: 14 },
+
+    // Locked modal
+    lockedModal: {
+      margin: 24,
+      borderRadius: 20,
+      padding: 28,
+      alignItems: "center",
+    },
+    lockedModalTitle: { fontSize: 18, fontWeight: "800", marginBottom: 8 },
+    lockedModalSub: { fontSize: 14, textAlign: "center", lineHeight: 22 },
+
+    // Logout modal
+    logoutModal: {
+      margin: 32,
+      borderRadius: 20,
+      padding: 28,
+      alignItems: "center",
+    },
+    logoutModalTitle: { fontSize: 20, fontWeight: "800", marginBottom: 8 },
+  });
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
-  safe: { flex: 1, backgroundColor: "#FFFFFF" },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 60, paddingTop: 10 },
-  
-  profileHeaderOuter: { marginBottom: 24, borderRadius: 28, overflow: 'hidden', elevation: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12 },
-  profileHeaderGradient: { padding: 24 },
-  profileHeaderInner: { flexDirection: 'row', alignItems: 'center' },
-  avatarContainer: { position: 'relative' },
-  avatarRing: { width: 84, height: 84, borderRadius: 42, padding: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
-  avatar: { width: '100%', height: '100%', borderRadius: 39, borderWidth: 2, borderColor: '#FFFFFF' },
-  avatarPlaceholder: { width: '100%', height: '100%', borderRadius: 39, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
-  statusDotPulsing: { position: 'absolute', bottom: 2, right: 2, width: 18, height: 18, borderRadius: 9, backgroundColor: '#22C55E', borderWidth: 3, borderColor: '#FFFFFF' },
-  profileInfo: { marginLeft: 18, flex: 1 },
-  nameText: { fontSize: 22, fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.5 },
-  phoneText: { color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 2, fontWeight: '600' },
-  idBadgeMini: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 8, alignSelf: 'flex-start' },
-  idTextMini: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
-  editProfileBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-
-  infoGridRow: { flexDirection: 'row', gap: 14, marginBottom: 28 },
-  statCellContainer: { flex: 1, borderRadius: 22, overflow: 'hidden', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 6 },
-  statCellGradient: { padding: 16 },
-  statCellHeader: { marginBottom: 10 },
-  statCellIconBox: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  statCellValue: { fontSize: 18, fontWeight: '900', color: '#FFFFFF' },
-  statCellLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
-
-  lockedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA', borderRadius: 12, padding: 12, marginBottom: 12 },
-  lockedBannerText: { flex: 1, color: '#C2410C', fontSize: 12, fontWeight: '600', lineHeight: 18 },
-
-  sectionHeadingRow: { marginBottom: 12, marginLeft: 4 },
-  sectionHeaderTitle: { color: '#64748B', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
-  menuGroupCard: { backgroundColor: '#FFFFFF', borderRadius: 28, padding: 8, marginBottom: 28, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, borderWidth: 1, borderColor: '#F1F5F9' },
-  menuLineItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 },
-  menuLineLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  menuLineIconBox: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  menuLineLabel: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
-  menuLineRight: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, maxWidth: '60%' },
-  menuLineValue: { color: '#94A3B8', fontSize: 14, fontWeight: '600', flexShrink: 1 },
-  menuStatusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  kycStatusDot: { width: 7, height: 7, borderRadius: 3.5 },
-  menuStatusBadgeText: { fontSize: 11, fontWeight: '800', textTransform: 'capitalize' },
-  menuDividerLine: { height: 1, backgroundColor: '#F8FAFC', marginHorizontal: 16 },
-
-  logoutButtonOuter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#FEF2F2', height: 64, borderRadius: 22, marginBottom: 32, borderWidth: 1, borderColor: '#FEE2E2', elevation: 2, shadowColor: '#EF4444', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
-  logoutButtonText: { color: '#EF4444', fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
-
-  footerVersion: { alignItems: 'center', marginBottom: 20 },
-  versionLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600' },
-  copyrightLabel: { color: '#CBD5E1', fontSize: 11, fontWeight: '500', marginTop: 4 },
-
-  modalOverlayBlur: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 40, borderTopRightRadius: 40, padding: 28, paddingBottom: 48 },
-  modalSheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 },
-  modalSheetTitle: { color: '#0F172A', fontSize: 26, fontWeight: '900', letterSpacing: -0.8 },
-  modalSheetSubtitle: { color: '#64748B', fontSize: 15, fontWeight: '500', marginTop: 4 },
-  closeModalBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  
-  langCell: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderRadius: 24, marginBottom: 12, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#F1F5F9' },
-  langCellActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
-  langCellLeft: { gap: 2 },
-  langCellText: { fontSize: 17, fontWeight: '800', color: '#1E293B' },
-  langCellTextActive: { color: '#F97316' },
-  langCellSub: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
-
-  supportGridList: { gap: 16, marginBottom: 28 },
-  supportListItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: '#F1F5F9' },
-  supportIconBox: { width: 60, height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 18 },
-  supportTextWrap: { flex: 1 },
-  supportLabelText: { color: '#0F172A', fontSize: 17, fontWeight: '800' },
-  supportDescText: { color: '#64748B', fontSize: 13, fontWeight: '500', marginTop: 3 },
-  modalActionBtnSecondary: { height: 64, borderRadius: 22, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9' },
-  modalActionBtnTextSecondary: { color: '#475569', fontSize: 16, fontWeight: '800' },
-
-  modalOverlayCenteredAlpha: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 28 },
-  lockedSupportBox: { backgroundColor: '#FFFFFF', borderRadius: 32, padding: 28, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 12 },
-  lockedSupportIcon: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center', marginBottom: 18, alignSelf: 'center' },
-  lockedSupportTitle: { color: '#0F172A', fontSize: 24, fontWeight: '900', textAlign: 'center' },
-  lockedSupportSubtitle: { color: '#64748B', fontSize: 14, fontWeight: '600', lineHeight: 22, textAlign: 'center', marginTop: 10, marginBottom: 22 },
-  lockedSupportPrimary: { height: 58, borderRadius: 18, backgroundColor: '#F97316', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
-  lockedSupportPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
-  lockedSupportSecondary: { height: 58, borderRadius: 18, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 },
-  lockedSupportSecondaryText: { color: '#C2410C', fontSize: 16, fontWeight: '900' },
-  lockedSupportClose: { height: 54, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
-  lockedSupportCloseText: { color: '#475569', fontSize: 15, fontWeight: '800' },
-  logoutConfirmationBox: { backgroundColor: '#FFFFFF', borderRadius: 36, padding: 32, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 12 },
-  logoutIconBadge: { width: 72, height: 72, borderRadius: 24, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#FEE2E2' },
-  logoutModalTitle: { color: '#0F172A', fontSize: 24, fontWeight: '900', letterSpacing: -0.5, marginBottom: 12 },
-  logoutModalSubtitle: { color: '#64748B', fontSize: 15, fontWeight: '500', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  logoutModalActions: { flexDirection: 'row', gap: 14, width: '100%' },
-  logoutCancelBtn: { flex: 1, height: 60, borderRadius: 20, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  logoutCancelBtnText: { color: '#64748B', fontSize: 16, fontWeight: '800' },
-  logoutConfirmBtn: { flex: 1.2, height: 60, borderRadius: 20, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', shadowColor: '#EF4444', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
-  logoutConfirmBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
-
-  infoSheetBox: { backgroundColor: '#FFFFFF', borderRadius: 40, padding: 32, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 28, elevation: 16 },
-  infoDataContainer: { marginBottom: 12 },
-  infoDataItem: { marginBottom: 20 },
-  infoDataLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
-  infoDataValue: { color: '#1E293B', fontSize: 18, fontWeight: '700', marginTop: 4 },
-  modalActionBtnPrimary: { backgroundColor: '#F97316', height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 12, shadowColor: '#F97316', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
-  modalActionBtnTextPrimary: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
-
-  inputLabelMicro: { fontSize: 11, fontWeight: '800', color: '#64748B', letterSpacing: 1, marginBottom: 8 },
-  modalInput: { backgroundColor: '#F8FAFC', paddingHorizontal: 16, height: 56, borderRadius: 16, fontSize: 16, fontWeight: '700', color: '#1E293B', borderWidth: 1, borderColor: '#E2E8F0' },
-  modalSearchField: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    minHeight: 56,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  modalSearchInput: {
-    flex: 1,
-    height: 56,
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  modalHelperText: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  modalBankDropdown: {
-    marginTop: 10,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#DDEEE7',
-    backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
-  },
-  modalBankDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  modalBankDropdownName: {
-    color: '#0F172A',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  modalBankDropdownCode: {
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  modalBankDivider: {
-    height: 1,
-    backgroundColor: '#EEF5EC',
-  },
-  vehicleChipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  vChip: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
-  vChipActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
-  vChipText: { color: '#64748B', fontSize: 14, fontWeight: '700' },
-  vChipTextActive: { color: '#F97316' },
-});

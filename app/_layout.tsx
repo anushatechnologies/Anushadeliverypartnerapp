@@ -2,6 +2,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { UserProvider, useUser } from '../context/UserContext';
 import { LanguageProvider } from '../context/LanguageContext';
+import { ThemeProvider } from '../context/ThemeContext';
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppLoader from '../components/apploader';
@@ -63,11 +64,13 @@ function NavigationGuard() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <UserProvider>
-        <LanguageProvider>
-          <NavigationGuard />
-        </LanguageProvider>
-      </UserProvider>
+      <ThemeProvider>
+        <UserProvider>
+          <LanguageProvider>
+            <NavigationGuard />
+          </LanguageProvider>
+        </UserProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

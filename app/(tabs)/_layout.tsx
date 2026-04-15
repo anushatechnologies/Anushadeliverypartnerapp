@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Dimensions,
   Linking,
-  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { ActiveOrderProvider, useActiveOrder } from "../../context/ActiveOrderContext";
@@ -22,26 +21,12 @@ function SmartLocationButton({ navProps }: { navProps: any }) {
 
   const handlePress = () => {
     if (activeOrderLocation) {
-      const { targetLat, targetLng, targetLabel, isPickedUp } = activeOrderLocation;
+      const { targetLat, targetLng, isPickedUp } = activeOrderLocation;
+      // Directly open Google Maps — no confirmation dialog
       const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLng}&travelmode=driving`;
-
-      const phaseLabel = isPickedUp
-        ? "Navigate to customer location"
-        : "Navigate to store for pickup";
-
-      Alert.alert(
-        phaseLabel,
-        targetLabel,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Open Maps",
-            onPress: () =>
-              Linking.openURL(mapsUrl).catch(() =>
-                Alert.alert("Error", "Could not open Google Maps")
-              ),
-          },
-        ]
+      Linking.openURL(mapsUrl).catch(() =>
+        Linking.openURL(`geo:${targetLat},${targetLng}?q=${targetLat},${targetLng}`)
+          .catch(() => {})
       );
     } else {
       // No active order — show rider's own live GPS screen
