@@ -4,11 +4,12 @@ import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  FlatList,
   Image,
   Linking,
   Modal,
@@ -18,6 +19,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity as RNTouchableOpacity,
   View,
 } from "react-native";
 import Animated, {
@@ -34,6 +36,7 @@ import CustomTouchableOpacity from "../../components/CustomTouchableOpacity";
 import PremiumHeader from "../../components/PremiumHeader";
 import { useLanguage } from "../../context/LanguageContext";
 import { useUser } from "../../context/UserContext";
+import { useActiveOrder } from "../../context/ActiveOrderContext";
 import { orderService } from "../../services/orderService";
 
 const { width } = Dimensions.get("window");
@@ -236,6 +239,13 @@ export default function OrdersTab() {
   const [refreshing, setRefreshing] = useState(false);
   const { authState } = useUser();
   const user = authState.user;
+  const { setActiveOrderLocation, clearActiveOrderLocation } = useActiveOrder();
+
+  // ── Ratings state for completed orders ──────────────────────────────────
+  const [ratingModal, setRatingModal] = useState(false);
+  const [ratingOrder, setRatingOrder] = useState<Order | null>(null);
+  const [starRating, setStarRating] = useState(0);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
   const getLatestOrder = async (baseOrder: Order): Promise<Order> => {
     try {
@@ -271,54 +281,71 @@ export default function OrdersTab() {
     setOtpModal(true);
   };
 
+  const extractOrders = (resp: any): any[] => {
+    if (Array.isArray(resp)) return resp;
+    if (resp && typeof resp === 'object') {
+      for (const key of ['data', 'content', 'orders', 'activeOrders', 'completedOrders']) {
+        if (Array.isArray(resp[key])) return resp[key];
+      }
+      const arrs = Object.values(resp).filter(Array.isArray) as any[][];
+      if (arrs.length > 0) return arrs[0];
+    }
+    return [];
+  };
+
   const fetchOrders = async () => {
     if (!user?.id) return;
     setRefreshing(true);
     try {
       if (activeTab === "Active") {
         const rawAll = await orderService.getOrders(user.id).catch(() => []);
-
-        const extractOrders = (resp: any) => {
-          if (Array.isArray(resp)) return resp;
-          if (resp && typeof resp === 'object') {
-            if (Array.isArray(resp.data)) return resp.data;
-            if (Array.isArray(resp.content)) return resp.content;
-            if (Array.isArray(resp.orders)) return resp.orders;
-            const arrs = Object.values(resp).filter(Array.isArray);
-            if (arrs.length > 0) return arrs[0];
-          }
-          return [];
-        };
-
         const listAll = extractOrders(rawAll);
-
-        // Filter out delivered ones to act as Active (meaning Picked Up, In Transit, Assigned, etc.)
-        const unique = Array.from(new Map(listAll.map(o => [o.id, o])).values());
-        const mapped = unique
+        const unique = Array.from(new Map(listAll.map((o: any) => [o.id, o])).values());
+        const mapped = (unique as any[])
           .filter((o: any) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED')
           .map(mapBackendOrder);
         setOrders(mapped);
-      } else {
-        const rawAll = await orderService.getOrders(user.id).catch(() => []);
-        const extractOrders = (resp: any) => {
-          if (Array.isArray(resp)) return resp;
-          if (resp && typeof resp === 'object') {
-            if (Array.isArray(resp.data)) return resp.data;
-            if (Array.isArray(resp.content)) return resp.content;
-            if (Array.isArray(resp.orders)) return resp.orders;
-            const arrs = Object.values(resp).filter(Array.isArray);
-            if (arrs.length > 0) return arrs[0];
+
+        // ── Wire up smart location button ──────────────────────────────
+        const firstActive = mapped[0];
+        if (firstActive) {
+          const isPickedUp = Boolean(firstActive.pickupConfirmed);
+          const coords = isPickedUp ? firstActive.customerCoords : firstActive.vendorCoords;
+          if (coords) {
+            setActiveOrderLocation({
+              orderId: String(firstActive.id),
+              orderNumber: firstActive.orderId,
+              isPickedUp,
+              targetLat: coords.latitude,
+              targetLng: coords.longitude,
+              targetLabel: isPickedUp
+                ? `${firstActive.customer} — ${firstActive.address}`
+                : `${firstActive.vendorName} — ${firstActive.vendorAddress}`,
+              targetAddress: isPickedUp ? firstActive.address : firstActive.vendorAddress || '',
+            });
+          } else {
+            clearActiveOrderLocation();
           }
-          return [];
-        };
-        const orderList = extractOrders(rawAll);
-        
-        // Past orders are ones that are explicitly finished or cancelled
-        const pastOrders = orderList.filter((o: any) => 
-          o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED'
-        );
-        const mapped = pastOrders.map(mapBackendOrder);
-        setOrders(mapped);
+        } else {
+          clearActiveOrderLocation();
+        }
+      } else {
+        // History: try dedicated completed endpoint first, fall back to full list
+        let historyRaw: any[] = [];
+        try {
+          historyRaw = extractOrders(await orderService.getCompletedOrders(user.id));
+        } catch {
+          historyRaw = [];
+        }
+        if (historyRaw.length === 0) {
+          const rawAll = await orderService.getOrders(user.id).catch(() => []);
+          const allList = extractOrders(rawAll);
+          historyRaw = allList.filter((o: any) =>
+            o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED'
+          );
+        }
+        const unique = Array.from(new Map(historyRaw.map((o: any) => [o.id, o])).values());
+        setOrders((unique as any[]).map(mapBackendOrder));
       }
     } catch (e) {
       console.warn("Failed fetching orders:", e);
@@ -582,39 +609,105 @@ export default function OrdersTab() {
           </View>
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {filteredOrders.length === 0 ? (
+        {/* ── ACTIVE: horizontal swipeable card board ─────────────────── */}
+        {activeTab === "Active" ? (
+          filteredOrders.length === 0 ? (
             <Animated.View entering={FadeInUp} style={styles.emptyContainer}>
               <View style={styles.emptyIconCircle}>
-                <MaterialCommunityIcons name="clipboard-text-search-outline" size={64} color="#CBD5E1" />
+                <MaterialCommunityIcons name="clipboard-text-search-outline" size={64} color="#4B5563" />
               </View>
               <Text style={styles.emptyTitle}>All caught up!</Text>
-              <Text style={styles.emptySubText}>No {activeTab.toLowerCase()} orders at the moment.</Text>
+              <Text style={styles.emptySubText}>No active orders right now.</Text>
             </Animated.View>
           ) : (
-            filteredOrders.map((order, i) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                index={i}
-                t={t}
-                onPress={async () => {
-                  setSelectedDetailOrder(order);
-                  setDetailVisible(true);
-                  try {
-                    setSelectedDetailOrder(await getLatestOrder(order));
-                  } catch(e) {
-                     console.log("Could not fetch full order details", e);
-                  }
-                }}
-                onVerify={() => { openFulfillmentModal(order); }}
+            <View style={styles.swipeWrapper}>
+              {filteredOrders.length > 1 && (
+                <View style={styles.swipeHint}>
+                  <MaterialCommunityIcons name="gesture-swipe-horizontal" size={16} color="#F97316" />
+                  <Text style={styles.swipeHintText}>Swipe to see all {filteredOrders.length} orders</Text>
+                </View>
+              )}
+              <FlatList
+                data={filteredOrders}
+                keyExtractor={(item) => String(item.id)}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={width - 32}
+                decelerationRate="fast"
+                contentContainerStyle={styles.swipeList}
+                renderItem={({ item, index }) => (
+                  <View style={styles.swipeCard}>
+                    <OrderCard
+                      order={item}
+                      index={index}
+                      t={t}
+                      onPress={async () => {
+                        setSelectedDetailOrder(item);
+                        setDetailVisible(true);
+                        try { setSelectedDetailOrder(await getLatestOrder(item)); } catch {}
+                      }}
+                      onVerify={() => openFulfillmentModal(item)}
+                    />
+                  </View>
+                )}
+                ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
               />
-            ))
-          )}
-        </ScrollView>
+              {/* Dot indicators */}
+              {filteredOrders.length > 1 && (
+                <View style={styles.dotRow}>
+                  {filteredOrders.map((_, i) => (
+                    <View key={i} style={[styles.dot, i === 0 && styles.dotActive]} />
+                  ))}
+                </View>
+              )}
+            </View>
+          )
+        ) : (
+          /* ── HISTORY: vertical scrollable list with ratings ────────── */
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <Animated.View /> as any
+            }
+          >
+            {filteredOrders.length === 0 ? (
+              <Animated.View entering={FadeInUp} style={styles.emptyContainer}>
+                <View style={styles.emptyIconCircle}>
+                  <MaterialCommunityIcons name="history" size={64} color="#4B5563" />
+                </View>
+                <Text style={styles.emptyTitle}>No History Yet</Text>
+                <Text style={styles.emptySubText}>Completed deliveries will appear here.</Text>
+              </Animated.View>
+            ) : (
+              filteredOrders.map((order, i) => (
+                <View key={order.id}>
+                  <OrderCard
+                    order={order}
+                    index={i}
+                    t={t}
+                    onPress={async () => {
+                      setSelectedDetailOrder(order);
+                      setDetailVisible(true);
+                      try { setSelectedDetailOrder(await getLatestOrder(order)); } catch {}
+                    }}
+                    onVerify={() => {}}
+                  />
+                  {/* Rating row for completed orders */}
+                  <Pressable
+                    style={styles.ratingRow}
+                    onPress={() => { setRatingOrder(order); setStarRating(0); setRatingModal(true); }}
+                  >
+                    <MaterialCommunityIcons name="star-outline" size={16} color="#F59E0B" />
+                    <Text style={styles.ratingRowText}>Rate this delivery</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color="#6B7280" />
+                  </Pressable>
+                </View>
+              ))
+            )}
+          </ScrollView>
+        )}
       </SafeAreaView>
 
       {/* Order Details Modal */}
@@ -1133,6 +1226,61 @@ export default function OrdersTab() {
         )}
       </Modal>
 
+      {/* ── Rating Modal ──────────────────────────────────────────────── */}
+      <Modal visible={ratingModal} transparent animationType="slide">
+        <View style={styles.ratingOverlay}>
+          <Animated.View entering={FadeInUp.springify().damping(18)} style={styles.ratingSheet}>
+            <View style={styles.ratingSheetHandle} />
+            <Text style={styles.ratingTitle}>Rate this Delivery</Text>
+            <Text style={styles.ratingSubtitle}>Order {ratingOrder?.orderId}</Text>
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Pressable key={star} onPress={() => setStarRating(star)} style={styles.starBtn}>
+                  <MaterialCommunityIcons
+                    name={starRating >= star ? "star" : "star-outline"}
+                    size={42}
+                    color={starRating >= star ? "#F59E0B" : "#374151"}
+                  />
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.ratingLabel}>
+              {starRating === 0 ? "Tap a star to rate" : ["", "Poor", "Fair", "Good", "Great", "Excellent!"][starRating]}
+            </Text>
+            <View style={styles.ratingBtnRow}>
+              <Pressable style={styles.ratingCancelBtn} onPress={() => setRatingModal(false)}>
+                <Text style={styles.ratingCancelText}>Skip</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.ratingSubmitBtn, starRating === 0 && { opacity: 0.4 }]}
+                disabled={starRating === 0 || ratingSubmitting}
+                onPress={async () => {
+                  if (!ratingOrder || starRating === 0) return;
+                  setRatingSubmitting(true);
+                  try {
+                    const { apiClient } = await import('../../services/apiClient');
+                    await apiClient.post(
+                      `/api/delivery-app/orders/${encodeURIComponent(ratingOrder.orderId)}/rate`,
+                      { stars: starRating }
+                    );
+                  } catch (e) {
+                    console.warn('Rating submit failed', e);
+                  } finally {
+                    setRatingSubmitting(false);
+                    setRatingModal(false);
+                  }
+                }}
+              >
+                {ratingSubmitting
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.ratingSubmitText}>Submit</Text>
+                }
+              </Pressable>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -1280,19 +1428,66 @@ function OrderCard({ order, index, t, onVerify, onPress }: { order: Order, index
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
-  safe: { flex: 1, backgroundColor: "#FFFFFF" },
-  headerContainer: { backgroundColor: '#FFFFFF', paddingBottom: 16 },
+  container: { flex: 1, backgroundColor: "#0D1117" },
+  safe: { flex: 1, backgroundColor: "#0D1117" },
+
+  // ── Swipeable board ───────────────────────────────────────────────────
+  swipeWrapper: { flex: 1 },
+  swipeHint: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4,
+  },
+  swipeHintText: { color: '#F97316', fontSize: 12, fontWeight: '700' },
+  swipeList: { paddingHorizontal: 16, paddingVertical: 12 },
+  swipeCard: { width: width - 32 },
+  dotRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingBottom: 16 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#374151' },
+  dotActive: { width: 18, backgroundColor: '#F97316' },
+
+  // ── Rating row (history list) ─────────────────────────────────────────
+  ratingRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#161B22', marginHorizontal: 16, marginTop: -8, marginBottom: 16,
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderRadius: 12, borderWidth: 1, borderColor: '#1F2937',
+  },
+  ratingRowText: { flex: 1, color: '#F59E0B', fontSize: 13, fontWeight: '700' },
+
+  // ── Rating Modal ──────────────────────────────────────────────────────
+  ratingOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)' },
+  ratingSheet: {
+    backgroundColor: '#161B22', borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    padding: 24, paddingBottom: 40, alignItems: 'center',
+    borderWidth: 1, borderColor: '#1F2937',
+  },
+  ratingSheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#374151', marginBottom: 20 },
+  ratingTitle: { color: '#fff', fontSize: 20, fontWeight: '900', marginBottom: 4 },
+  ratingSubtitle: { color: '#6B7280', fontSize: 13, fontWeight: '600', marginBottom: 24 },
+  starsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  starBtn: { padding: 4 },
+  ratingLabel: { color: '#F59E0B', fontSize: 16, fontWeight: '800', marginBottom: 28, minHeight: 22 },
+  ratingBtnRow: { flexDirection: 'row', gap: 12, width: '100%' },
+  ratingCancelBtn: {
+    flex: 1, height: 52, borderRadius: 16, borderWidth: 1, borderColor: '#374151',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  ratingCancelText: { color: '#6B7280', fontSize: 15, fontWeight: '700' },
+  ratingSubmitBtn: {
+    flex: 2, height: 52, borderRadius: 16, backgroundColor: '#F97316',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  ratingSubmitText: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  headerContainer: { backgroundColor: '#0D1117', paddingBottom: 16 },
 
   // Tab Styles
   tabContainer: { paddingHorizontal: 20, marginTop: 4 },
   tabPill: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#161B22',
     borderRadius: 24,
     padding: 6,
     borderWidth: 1,
-    borderColor: '#E2E8F0'
+    borderColor: '#1F2937'
   },
   tabBtn: {
     flex: 1,
@@ -1323,33 +1518,31 @@ const styles = StyleSheet.create({
   tabLabelActive: { color: '#FFFFFF' },
 
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 40,
-    paddingTop: 24,
-    backgroundColor: '#F8FAFC',
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
+    paddingTop: 12,
+    backgroundColor: '#0D1117',
   },
 
   // Card Styles
   orderCardWrap: {
-    marginBottom: 20,
-    borderRadius: 32,
-    backgroundColor: '#FFFFFF',
+    marginBottom: 16,
+    borderRadius: 24,
+    backgroundColor: '#161B22',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.3,
     shadowRadius: 12,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#1F2937',
     overflow: 'hidden'
   },
   orderCardInner: { padding: 20 },
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  cardOrderId: { fontSize: 18, fontWeight: '900', color: '#1E293B', letterSpacing: -0.5 },
+  cardOrderId: { fontSize: 18, fontWeight: '900', color: '#F9FAFB', letterSpacing: -0.5 },
   earningsBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  earningsLabel: { fontSize: 12, fontWeight: '600', color: '#64748B' },
+  earningsLabel: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
   earningsVal: { fontSize: 13, fontWeight: '800', color: '#FB923C' },
   statusPill: {
     flexDirection: 'row',
@@ -1360,42 +1553,44 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   statusPillText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  cardDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 16 },
+  cardDivider: { height: 1, backgroundColor: '#1F2937', marginVertical: 16 },
 
   // Vendor Info Styles
   vendorRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   iconCircleVendor: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EDE9FE' },
-  pickupLabel: { fontSize: 10, fontWeight: '800', color: '#64748B', letterSpacing: 0.5, marginBottom: 2 },
-  vendorName: { fontSize: 15, fontWeight: '800', color: '#1E293B' },
+  pickupLabel: { fontSize: 10, fontWeight: '800', color: '#6B7280', letterSpacing: 0.5, marginBottom: 2 },
+  vendorName: { fontSize: 15, fontWeight: '800', color: '#F9FAFB' },
   routeConnector: { height: 24, marginLeft: 20, borderLeftWidth: 2, borderLeftColor: '#E2E8F0', borderStyle: 'dotted', marginVertical: 2 },
   routeDottedLine: { display: 'none' }, // Using borderLeft on container instead
-  phoneActionBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
+  phoneActionBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#374151' },
 
   // Customer Info Styles
   customerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   iconCircle: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
-  customerName: { fontSize: 15, fontWeight: '800', color: '#1E293B' },
+  customerName: { fontSize: 15, fontWeight: '800', color: '#F9FAFB' },
   customerPhone: { fontSize: 13, fontWeight: '600', color: '#FB923C', marginTop: 1 },
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
-  addressText: { flex: 1, fontSize: 13, color: '#445569', fontWeight: '500', lineHeight: 20 },
+  addressText: { flex: 1, fontSize: 13, color: '#9CA3AF', fontWeight: '500', lineHeight: 20 },
   metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 20 },
   metaCapsule: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#1F2937',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 10
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#374151',
   },
-  metaCapsuleText: { fontSize: 11, fontWeight: '800', color: '#475569' },
+  metaCapsuleText: { fontSize: 11, fontWeight: '800', color: '#D1D5DB' },
   navBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#FFF7ED',
+    backgroundColor: 'rgba(249,115,22,0.12)',
     borderWidth: 1,
-    borderColor: '#FED7AA',
+    borderColor: 'rgba(249,115,22,0.3)',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1431,9 +1626,9 @@ const styles = StyleSheet.create({
 
   // Empty State
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 60, paddingHorizontal: 40 },
-  emptyIconCircle: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
-  emptyTitle: { fontSize: 20, fontWeight: '900', color: '#1E293B', marginBottom: 8 },
-  emptySubText: { fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 22 },
+  emptyIconCircle: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#161B22', borderWidth: 1, borderColor: '#1F2937', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  emptyTitle: { fontSize: 20, fontWeight: '900', color: '#F9FAFB', marginBottom: 8 },
+  emptySubText: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 22 },
 
   // Modal Styles
   modalBlurOverlay: { flex: 1, justifyContent: 'flex-end' },
