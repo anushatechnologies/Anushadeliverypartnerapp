@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
@@ -161,6 +161,29 @@ function extractOrders(resp: any): any[] {
   }
   return [];
 }
+
+const normalizeTarget = (value: unknown) => {
+  if (value === null || value === undefined) return undefined;
+  const normalized = String(value).trim();
+  return normalized.length ? normalized : undefined;
+};
+
+const matchesNotificationTarget = (
+  order: Order,
+  notificationOrderId?: string,
+  notificationOrderNumber?: string,
+) => {
+  const normalizedId = normalizeTarget(notificationOrderId);
+  const normalizedNumber = normalizeTarget(notificationOrderNumber);
+  const orderId = normalizeTarget(order.id);
+  const orderNumber = normalizeTarget(order.orderId);
+
+  return (
+    (normalizedId !== undefined &&
+      (normalizedId === orderId || normalizedId === orderNumber)) ||
+    (normalizedNumber !== undefined && normalizedNumber === orderNumber)
+  );
+};
 
 // ─── Situational action button helper ────────────────────────────────────────
 function getOrderPhase(order: Order) {
@@ -375,11 +398,17 @@ const cardStyles = StyleSheet.create({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function OrdersTab() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    notificationOrderId?: string | string[];
+    notificationOrderNumber?: string | string[];
+  }>();
   useLanguage();
   const { theme } = useTheme();
   const { authState } = useUser();
   const user = authState.user;
   const { setActiveOrderLocation, clearActiveOrderLocation } = useActiveOrder();
+  const handledNotificationKey = useRef<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<"Active" | "Completed">("Active");
   const [orders, setOrders] = useState<Order[]>([]);
@@ -493,6 +522,61 @@ export default function OrdersTab() {
     const interval = setInterval(() => fetchOrders(true), 2000);
     return () => clearInterval(interval);
   }, [activeTab, fetchOrders]);
+
+  const notificationOrderId = normalizeTarget(params.notificationOrderId);
+  const notificationOrderNumber = normalizeTarget(params.notificationOrderNumber);
+
+  useEffect(() => {
+    if (!notificationOrderId && !notificationOrderNumber) {
+      handledNotificationKey.current = null;
+      return;
+    }
+
+    const targetKey = `${notificationOrderId ?? ""}:${notificationOrderNumber ?? ""}`;
+    if (handledNotificationKey.current === targetKey) {
+      return;
+    }
+
+    const openTargetOrder = (targetOrder: Order) => {
+      handledNotificationKey.current = targetKey;
+      setActiveTab(targetOrder.status === "Completed" ? "Completed" : "Active");
+      setDetailOrder(targetOrder);
+      setDetailVisible(true);
+      router.replace("/(tabs)/orders");
+    };
+
+    const existingOrder = orders.find((order) =>
+      matchesNotificationTarget(order, notificationOrderId, notificationOrderNumber),
+    );
+    if (existingOrder) {
+      openTargetOrder(existingOrder);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchTargetOrder = async () => {
+      try {
+        let rawOrder: any = null;
+        if (notificationOrderId && !Number.isNaN(Number(notificationOrderId))) {
+          rawOrder = await orderService.getOrderById(Number(notificationOrderId)).catch(() => null);
+        }
+        if (!rawOrder && notificationOrderNumber) {
+          rawOrder = await orderService.getOrderByNumber(notificationOrderNumber).catch(() => null);
+        }
+        if (!cancelled && rawOrder) {
+          openTargetOrder(mapBackendOrder(rawOrder));
+        }
+      } catch {
+        // Ignore notification deep-link lookup failures and keep the current list flow.
+      }
+    };
+
+    fetchTargetOrder();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notificationOrderId, notificationOrderNumber, orders, router]);
 
   // ── Action handler ────────────────────────────────────────────────────────
   const handleAction = useCallback(async (order: Order, phase: string) => {

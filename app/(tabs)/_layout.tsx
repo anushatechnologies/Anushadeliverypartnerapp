@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { ActiveOrderProvider, useActiveOrder } from "../../context/ActiveOrderContext";
+import { navigateFromNotification as navigateFromNotificationPayload } from "../../utils/notificationNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -79,13 +80,13 @@ function TabsLayoutInner() {
     messaging()
       .getInitialNotification()
       .then((msg: any) => {
-        if (msg?.data) navigateFromNotification(msg.data, router);
+        if (msg?.data) navigateFromNotificationPayload(router, msg.data);
       })
       .catch(() => {});
 
     // App opened from BACKGROUND state via notification tap
     const unsub = messaging().onNotificationOpenedApp((msg: any) => {
-      if (msg?.data) navigateFromNotification(msg.data, router);
+      if (msg?.data) navigateFromNotificationPayload(router, msg.data);
     });
 
     return unsub;
