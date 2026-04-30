@@ -6,7 +6,7 @@ import { ThemeProvider } from '../context/ThemeContext';
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppLoader from '../components/apploader';
-
+ 
 function NavigationGuard() {
   const { authState } = useUser();
   const segments = useSegments();
