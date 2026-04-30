@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Application from 'expo-application';
-
+ 
 export default function AboutScreen() {
   const router = useRouter();
   const appVersion = Application.nativeApplicationVersion ?? "2.4.8";
